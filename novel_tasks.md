@@ -56,35 +56,35 @@ Write Alembic migration for the glossary table. Columns: `id` (UUID PK), `novel_
 
 ---
 
-### E1-T3 · S3 MCP tool wrapper `critical`
+### E1-T3 · S3 chapter storage wrapper `critical`
 
 - [X] Task complete
 
 **Dependencies:** E1-T1
 
 **Description**
-Python MCP server exposing two tools: `fetch_chapter(novel_name, chapter_number) → str` and `upload_chapter(novel_name, chapter_number, content) → None`. Uses boto3. Follows the `s3://novel-translation/raw/` and `/translated/` key conventions.
+Python storage module exposing `fetch_chapter(novel_name, chapter_number) → str` and `upload_chapter(novel_name, chapter_number, content) → None`. Uses boto3. Follows the `s3://novel-translation/raw/` and `/translated/` key conventions.
 
-**Files:** `mcp_tools/s3_tools.py`
+**Files:** `backend/src/novel_translation_backend/storage/s3_chapters.py`
 
 **Definition of done** (User tests not agent)
 - [X] `fetch_chapter('test-novel', 1)` returns a non-empty string when the object exists in S3
 - [X] `upload_chapter('test-novel', 1, 'content')` creates an object at `translated/test-novel/chapter-001.md`
 - [X] `fetch_chapter` raises a clear exception (not a silent `None`) when the chapter does not exist
-- [X] The MCP tool server starts without error: `python mcp_tools/s3_tools.py`
+- [X] Importing the storage module succeeds without starting a separate process
 - [X] Chapter number is zero-padded to three digits in the S3 key (`chapter-001`, not `chapter-1`)
 
 **Agent guardrails**
-- Do not add any tools beyond `fetch_chapter` and `upload_chapter` — no list, no delete
-- The tool is called programmatically by the LangGraph node, not by the LLM
+- Do not add any operations beyond `fetch_chapter` and `upload_chapter` — no list, no delete
+- The storage functions are called programmatically by the LangGraph node, not by the LLM
 - Do not hardcode AWS credentials — read from environment variables only
-- `raw/` objects are read-only from the tool's perspective — `upload_chapter` must write only to `translated/`
+- `raw/` objects are read-only from the storage module's perspective — `upload_chapter` must write only to `translated/`
 
 ---
 
 ### E1-T4 · Docker Compose local dev setup `high`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T1
 
@@ -114,7 +114,7 @@ Compose file with three services: `postgres`, `backend` (FastAPI hot reload), `f
 
 ### E2-T1 · State TypedDict definition `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T1
 
@@ -124,10 +124,10 @@ Define `WorkflowState` TypedDict with all 14 specced fields plus `error_detail: 
 **Files:** `graph/state.py`
 
 **Definition of done**
-- [ ] Importing `WorkflowState` from `graph/state.py` succeeds with no missing dependencies
-- [ ] All 14 fields present: `workflow_id`, `novel_name`, `chapter_number`, `status`, `raw_chinese_text`, `glossary_terms`, `translated_text`, `edited_text`, `final_text`, `editor_feedback`, `created_at`, `completed_at`, `model_used`, `error_detail`
-- [ ] `glossary_terms` is typed as `List[GlossaryTerm]` where `GlossaryTerm` is a TypedDict with: `chinese`, `proposed_english`, `approved_english`, `status`, `is_new`
-- [ ] A `mypy --strict` run on `state.py` produces zero errors
+- [X] Importing `WorkflowState` from `graph/state.py` succeeds with no missing dependencies
+- [X] All 14 fields present: `workflow_id`, `novel_name`, `chapter_number`, `status`, `raw_chinese_text`, `glossary_terms`, `translated_text`, `edited_text`, `final_text`, `editor_feedback`, `created_at`, `completed_at`, `model_used`, `error_detail`
+- [X] `glossary_terms` is typed as `List[GlossaryTerm]` where `GlossaryTerm` is a TypedDict with: `chinese`, `proposed_english`, `approved_english`, `status`, `is_new`
+- [X] A `mypy --strict` run on `state.py` produces zero errors
 
 **Agent guardrails**
 - Do not add any fields beyond the 14 listed — no caching fields, no per-node timestamps
@@ -139,7 +139,7 @@ Define `WorkflowState` TypedDict with all 14 specced fields plus `error_detail: 
 
 ### E2-T2 · FastAPI + LangGraph process coupling `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T1
 
@@ -162,10 +162,10 @@ async def run_graph(workflow_id: str, initial_state: WorkflowState):
 ```
 
 **Definition of done**
-- [ ] `POST /api/workflow/start` returns `{workflow_id}` within 200ms (graph runs in background, does not block)
-- [ ] `state_store[workflow_id]` is populated and readable from the status endpoint immediately after start
-- [ ] Deliberately raising an exception inside a node causes `status` to become `'error'` and `error_detail` to be non-null — verifiable via `GET /api/workflow/{id}/status`
-- [ ] Two sequential workflow starts produce two independent entries in `state_store` with different `workflow_id`s
+- [X] `POST /api/workflow/start` returns `{workflow_id}` within 200ms (graph runs in background, does not block)
+- [X] `state_store[workflow_id]` is populated and readable from the status endpoint immediately after start
+- [X] Deliberately raising an exception inside a node causes `status` to become `'error'` and `error_detail` to be non-null — verifiable via `GET /api/workflow/{id}/status`
+- [X] Two sequential workflow starts produce two independent entries in `state_store` with different `workflow_id`s
 
 **Agent guardrails**
 - Do not use `threading.Thread` — use `asyncio.create_task` only
@@ -177,7 +177,7 @@ async def run_graph(workflow_id: str, initial_state: WorkflowState):
 
 ### E2-T3 · Graph definition and node wiring `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T1 · E2-T2
 
@@ -187,10 +187,10 @@ Define the LangGraph `StateGraph`. Wire all nodes in order: `s3_retrieval → gl
 **Files:** `graph/graph.py`
 
 **Definition of done**
-- [ ] `graph.get_graph().nodes` returns exactly: `s3_retrieval`, `glossary_extractor`, `hitl_glossary`, `glossary_db_write`, `translator`, `editor`, `hitl_final`, `complete`
-- [ ] Invoking the graph with a mock state that auto-approves both HITL checkpoints runs end-to-end without error
-- [ ] Glossary review loop: rejecting all terms at `hitl_glossary` routes back to `glossary_extractor`, not forward
-- [ ] Final review loop: requesting revision at `hitl_final` routes back to `editor` with `editor_feedback` set
+- [X] `graph.get_graph().nodes` returns exactly: `s3_retrieval`, `glossary_extractor`, `hitl_glossary`, `glossary_db_write`, `translator`, `editor`, `hitl_final`, `complete`
+- [X] Invoking the graph with a mock state that auto-approves both HITL checkpoints runs end-to-end without error
+- [X] Glossary review loop: rejecting all terms at `hitl_glossary` routes back to `glossary_extractor`, not forward
+- [X] Final review loop: requesting revision at `hitl_final` routes back to `editor` with `editor_feedback` set
 
 **Agent guardrails**
 - Do not implement any node logic in this file — `graph.py` wires only. All logic lives in `nodes/`
@@ -202,20 +202,20 @@ Define the LangGraph `StateGraph`. Wire all nodes in order: `s3_retrieval → gl
 
 ### E2-T4 · S3 retrieval node `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T3 · E2-T1
 
 **Description**
-Node calls the S3 MCP tool programmatically (not via LLM) to fetch raw Chinese text. Sets `status='fetching'` at entry. Stores result in `state.raw_chinese_text`. Raises on missing chapter.
+Node calls the S3 storage function programmatically (not via LLM) to fetch raw Chinese text. Sets `status='fetching'` at entry. Stores result in `state.raw_chinese_text`. Raises on missing chapter.
 
 **Files:** `graph/nodes/s3_retrieval.py`
 
 **Definition of done**
-- [ ] Node sets `state['status'] = 'fetching'` as its first line, before any I/O
-- [ ] `state['raw_chinese_text']` is a non-empty string after node completes successfully
-- [ ] Node raises a descriptive exception (e.g. `ChapterNotFoundError`) when S3 returns 404 — does not return `None` silently
-- [ ] `raw_chinese_text` is never mutated by any downstream node — verify it is unchanged after translator runs
+- [X] Node sets `state['status'] = 'fetching'` as its first line, before any I/O
+- [X] `state['raw_chinese_text']` is a non-empty string after node completes successfully
+- [X] Node raises a descriptive exception (e.g. `ChapterNotFoundError`) when S3 returns 404 — does not return `None` silently
+- [X] `raw_chinese_text` is never mutated by any downstream node — verify it is unchanged after translator runs
 
 **Agent guardrails**
 - Do not call the Anthropic API in this node — S3 fetch is pure infrastructure
@@ -232,21 +232,25 @@ Node calls the S3 MCP tool programmatically (not via LLM) to fetch raw Chinese t
 **Dependencies:** E1-T2 · E2-T1
 
 **Description**
-After human review, persist approved terms: `UPDATE` status and `approved_english` for existing terms. Hard-delete rejected terms. `UPDATE` `translated_at_chapter` on newly approved terms.
+After human review, persist only newly approved terms. Pending and rejected terms
+remain in workflow state only and are dropped from the state glossary list after
+review. Use one transactional bulk insert and set `translated_at_chapter` when
+the approved term is inserted.
 
 **Files:** `graph/nodes/glossary_db_write.py` · `db/glossary_repo.py`
 
 **Definition of done**
-- [ ] An approved term has `status='approved'` and `approved_english` populated in the DB after node runs
-- [ ] A rejected term is fully absent from the DB after node runs (hard delete confirmed by `SELECT`)
+- [ ] A newly approved term has `status='approved'` and its approved English value populated in the DB after node runs
+- [ ] Pending and rejected terms are removed from `state['glossary_terms']` and are never written to the DB
 - [ ] `translated_at_chapter` is set on newly approved terms to `state['chapter_number']`
 - [ ] Node is idempotent: running it twice with the same state produces the same DB state
 
 **Agent guardrails**
-- Do not write terms that were not touched during review — only update rows with explicit human decisions
-- Do not implement a soft delete — rejected terms must be hard-deleted per spec (phase 2 adds suppression)
+- Do not write pending or rejected terms to the DB
+- Do not rewrite existing approved terms
 - Do not call the Anthropic API in this node
 - All DB writes must be wrapped in a single transaction — partial writes are not acceptable
+- Limit persistence to one bulk DB call when newly approved terms exist
 
 ---
 
@@ -257,7 +261,7 @@ After human review, persist approved terms: `UPDATE` status and `approved_englis
 **Dependencies:** E1-T2 · E1-T3 · E2-T1
 
 **Description**
-Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via MCP tool. Set `completed_at`. Update `translated_at_chapter` on approved terms in DB.
+Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via the storage module and set `completed_at`. Glossary persistence is completed by E2-T5, so this node performs no DB calls.
 
 **Files:** `graph/nodes/complete.py`
 
@@ -265,7 +269,7 @@ Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via MCP tool. Se
 - [ ] After node runs, S3 object at `translated/<novel>/chapter-NNN.md` exists and contains `state['final_text']`
 - [ ] `state['completed_at']` is an ISO 8601 timestamp string
 - [ ] `state['status']` is set to `'complete'`
-- [ ] Glossary terms with `is_new=True` have `translated_at_chapter` updated in the DB
+- [ ] Node performs no DB calls
 
 **Agent guardrails**
 - Do not overwrite an existing translated chapter — raise if object exists
@@ -311,18 +315,18 @@ Implement both `interrupt()` call sites. Glossary review pauses after `glossary_
 **Dependencies:** E1-T2 · E2-T1
 
 **Description**
-LLM receives `raw_chinese_text` and the list of already-approved terms. Identifies named entities, cultivation terms, titles, and proper nouns. Proposes English translations. Does not re-propose already-approved terms. Node does post-LLM dedup and inserts new terms as `pending_review` into DB.
+LLM receives `raw_chinese_text` and the list of already-approved terms. Identifies named entities, cultivation terms, titles, and proper nouns. Proposes English translations. Does not re-propose already-approved terms. Node does post-LLM dedup and keeps new terms as `pending_review` in workflow state only.
 
 **Files:** `graph/nodes/glossary_extractor.py` · `prompts/glossary_extractor.txt`
 
 **Definition of done**
 - [ ] Node returns at least one `glossary_term` with `is_new=True` when given a chapter containing an unapproved named entity
 - [ ] Node returns zero new terms when all entities are already in the approved list
-- [ ] Every new term has `status='pending_review'` and `approved_english=None` in both state and DB
+- [ ] Every new term has `status='pending_review'` and `approved_english=None` in state and is not written to the DB
 - [ ] The prompt file contains explicit negative instruction: do not propose terms present in the provided approved list
 
 **Agent guardrails**
-- Do not have the LLM write directly to the DB — node code handles DB insertion after the LLM responds
+- Do not write pending terms to the DB — E2-T5 persists them only after human approval
 - Do not pass `raw_chinese_text` to the LLM without also passing the approved terms list — missing this causes re-proposals
 - Do not truncate the chapter text silently — if it exceeds the context window, raise a clear error
 - Prompt must specify output format (JSON array) and the node must validate the structure before inserting to DB
