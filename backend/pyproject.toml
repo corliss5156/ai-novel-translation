@@ -1,0 +1,26 @@
+[project]
+name = "novel-translation-backend"
+version = "0.1.0"
+description = "FastAPI backend scaffold for AI novel translation workflows."
+requires-python = ">=3.10"
+dependencies = [
+    "alembic",
+    "boto3",
+    "fastapi",
+    "mcp",
+    "psycopg[binary]",
+    "sqlalchemy",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
