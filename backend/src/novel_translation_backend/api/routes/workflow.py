@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from novel_translation_backend.constants.workflow_status import WORKFLOW_STATUS_PENDING
 from novel_translation_backend.graph.runner import get_state, start_graph
 from novel_translation_backend.graph.state import WorkflowState
+from novel_translation_backend.llm.client import WORKFLOW_MODELS
 
 
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
@@ -37,7 +38,7 @@ async def start_workflow(request: StartWorkflowRequest) -> StartWorkflowResponse
         editor_feedback=None,
         created_at=datetime.now(timezone.utc).isoformat(),
         completed_at=None,
-        model_used="claude-sonnet-4-20250514",
+        model_used=WORKFLOW_MODELS,
         error_detail=None,
         warnings=[],
     )

@@ -43,7 +43,7 @@ User submits chapter
 | Layer | Technology |
 |---|---|
 | Orchestration | LangGraph |
-| LLM | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| LLM | OpenAI Responses API (`gpt-5.4-nano` extraction/editor, `gpt-5.4-mini` translation) |
 | S3 integration | boto3 storage module |
 | Database | PostgreSQL (local via Docker) |
 | API | FastAPI (Python) |
@@ -78,7 +78,7 @@ wuxia-translation-ai/
 │   ├── db/
 │   │   └── glossary_repo.py     # DB access layer
 │   ├── llm/
-│   │   └── client.py            # Shared Anthropic client singleton
+│   │   └── client.py            # Shared OpenAI client singleton
 │   ├── storage/
 │   │   └── s3_chapters.py       # S3 chapter fetch and upload operations
 │   ├── migrations/
@@ -114,7 +114,7 @@ wuxia-translation-ai/
 ## Prerequisites
 
 - Docker and Docker Compose
-- An Anthropic API key
+- An OpenAI API key
 - AWS credentials with read/write access to your S3 bucket
 - Node.js 18+ (for local frontend development outside Docker)
 - Python 3.11+ (for local backend development outside Docker)
@@ -134,7 +134,7 @@ cp .env.example .env
 Open `.env` and fill in your values:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wuxia
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...

@@ -23,7 +23,9 @@ LangGraph was chosen over alternatives (CrewAI, AutoGen) for the following reaso
 - Crash recovery and resumability are built into the checkpointing model (phase 2)
 - The abstraction level rewards understanding: interviewers can ask "walk me through your architecture" and the code matches the answer
 
-**Model:** `claude-sonnet-4-20250514` across all LLM nodes. A shared singleton client is used — see `llm/client.py`. Per-node model selection is a phase 2 improvement.
+**Models:** `gpt-5.4-nano` for glossary extraction and editing, and
+`gpt-5.4-mini` for translation through the OpenAI Responses API. A shared
+singleton client is used — see `llm/client.py`.
 
 ---
 
@@ -77,7 +79,7 @@ class WorkflowState(TypedDict):
     # --- Metadata ---
     created_at:        str         # ISO 8601 UTC timestamp
     completed_at:      str | None  # ISO 8601 UTC timestamp, set on completion
-    model_used:        str         # e.g. "claude-sonnet-4-20250514"
+    model_used:        str         # records per-node model routing
 ```
 
 ### Important constraints on state
@@ -381,7 +383,7 @@ The UI is a single-page application. There is no routing — the active panel is
 | Layer | Technology |
 |---|---|
 | Orchestration | LangGraph |
-| LLM | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| LLM | OpenAI Responses API (`gpt-5.4-nano` extraction/editor, `gpt-5.4-mini` translation) |
 | S3 integration | boto3 storage module |
 | Database | PostgreSQL (Docker locally) |
 | API layer | FastAPI (Python) |

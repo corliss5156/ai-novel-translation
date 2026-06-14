@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from importlib.resources import files
 from typing import Any
 
@@ -10,22 +9,12 @@ from novel_translation_backend.constants.glossary_status import (
 )
 from novel_translation_backend.db.glossary_repo import get_approved_glossary_terms
 from novel_translation_backend.graph.state import GlossaryTerm, WorkflowState
+from novel_translation_backend.llm.client import NANO_MODEL, invoke
 
 
 MAX_GLOSSARY_PROMPT_CHARACTERS = 20_000
 APPROVED_GLOSSARY_MARKER = "{{APPROVED_GLOSSARY_JSON}}"
 RAW_CHINESE_TEXT_MARKER = "{{RAW_CHINESE_TEXT}}"
-
-GlossaryLlmCallable = Callable[[str], str]
-
-_glossary_llm: GlossaryLlmCallable | None = None
-
-
-def configure_glossary_llm(invoke: GlossaryLlmCallable) -> None:
-    """Configure the provider-independent LLM callable used by this node."""
-    global _glossary_llm
-    _glossary_llm = invoke
-
 
 def glossary_extractor_node(state: WorkflowState) -> WorkflowState:
     approved_terms = _deduplicate_approved_terms(
@@ -33,13 +22,7 @@ def glossary_extractor_node(state: WorkflowState) -> WorkflowState:
     )
     prompt = _build_prompt(state["raw_chinese_text"], approved_terms)
 
-    if _glossary_llm is None:
-        raise RuntimeError(
-            "Glossary extractor LLM is not configured. "
-            "Call configure_glossary_llm() before running the workflow."
-        )
-
-    proposed_terms = _parse_proposed_terms(_glossary_llm(prompt))
+    proposed_terms = _parse_proposed_terms(invoke(prompt, model=NANO_MODEL))
     approved_chinese = {term["chinese"] for term in approved_terms}
     new_terms = [
         term for term in proposed_terms if term["chinese"] not in approved_chinese

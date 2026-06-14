@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from importlib.resources import files
 
 from novel_translation_backend.constants.glossary_status import (
@@ -11,22 +10,12 @@ from novel_translation_backend.constants.workflow_status import (
     WORKFLOW_STATUS_TRANSLATING,
 )
 from novel_translation_backend.graph.state import GlossaryTerm, WorkflowState
+from novel_translation_backend.llm.client import MINI_MODEL, invoke
 
 
 MAX_TRANSLATOR_PROMPT_CHARACTERS = 20_000
 APPROVED_GLOSSARY_MARKER = "{{APPROVED_GLOSSARY_JSON}}"
 RAW_CHINESE_TEXT_MARKER = "{{RAW_CHINESE_TEXT}}"
-
-TranslatorLlmCallable = Callable[[str], str]
-
-_translator_llm: TranslatorLlmCallable | None = None
-
-
-def configure_translator_llm(invoke: TranslatorLlmCallable) -> None:
-    """Configure the provider-independent LLM callable used by this node."""
-    global _translator_llm
-    _translator_llm = invoke
-
 
 def translator_node(state: WorkflowState) -> WorkflowState:
     state["status"] = WORKFLOW_STATUS_TRANSLATING
@@ -35,13 +24,7 @@ def translator_node(state: WorkflowState) -> WorkflowState:
     approved_terms = _approved_terms(state["glossary_terms"])
     prompt = _build_prompt(raw_chinese_text, approved_terms)
 
-    if _translator_llm is None:
-        raise RuntimeError(
-            "Translator LLM is not configured. "
-            "Call configure_translator_llm() before running the workflow."
-        )
-
-    translated_text = _validate_translation(_translator_llm(prompt))
+    translated_text = _validate_translation(invoke(prompt, model=MINI_MODEL))
     state["translated_text"] = translated_text
     existing_warnings = state["warnings"]
     state["warnings"] = list(

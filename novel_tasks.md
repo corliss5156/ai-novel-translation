@@ -21,7 +21,7 @@ Create repo structure: `/backend` (FastAPI), `/frontend` (Next), `/infra` (Docke
 **Definition of done**
 - [X] Running `ls` at repo root shows exactly: `backend/`, `frontend/`, `infra/`, `docker-compose.yml`, `.env.example`, `.gitignore`, `README.md`
 - [X] `cd frontend && npm install && npm run build` exits 0
-- [X] `.env.example` contains entries for: `ANTHROPIC_API_KEY`, `DATABASE_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME`
+- [X] `.env.example` contains entries for: `OPENAI_API_KEY`, `DATABASE_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME`
 
 **Agent guardrails**
 - Do not create any application logic files — scaffold only. No nodes, routes, or components yet
@@ -219,7 +219,7 @@ Node calls the S3 storage function programmatically (not via LLM) to fetch raw C
 - [X] `raw_chinese_text` is never mutated by any downstream node — verify it is unchanged after translator runs
 
 **Agent guardrails**
-- Do not call the Anthropic API in this node — S3 fetch is pure infrastructure
+- Do not call the OpenAI API in this node — S3 fetch is pure infrastructure
 - Do not write to `state['translated_text']` or any field other than `status` and `raw_chinese_text`
 - Do not catch and swallow S3 exceptions — let them propagate so the runner's `try/except` records `error_detail`
 - Do not hardcode novel name or chapter number — always read from state
@@ -249,7 +249,7 @@ the approved term is inserted.
 **Agent guardrails**
 - Do not write pending or rejected terms to the DB
 - Do not rewrite existing approved terms
-- Do not call the Anthropic API in this node
+- Do not call the OpenAI API in this node
 - All DB writes must be wrapped in a single transaction — partial writes are not acceptable
 - Limit persistence to one bulk DB call when newly approved terms exist
 
@@ -275,7 +275,7 @@ Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via the storage 
 **Agent guardrails**
 - Do not overwrite an existing translated chapter — raise if object exists
 - Do not set `final_text` from `edited_text` — `final_text` must have been set by the HITL approval step
-- Do not call the Anthropic API in this node
+- Do not call the OpenAI API in this node
 - `completed_at` must use UTC, not local time
 
 ---
@@ -385,24 +385,26 @@ LLM enforces formatting rules on `translated_text`. Addresses `editor_feedback` 
 
 ---
 
-### E3-T4 · Anthropic client singleton `medium`
+### E3-T4 · OpenAI client singleton `medium`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T1
 
 **Description**
-Shared Anthropic client configured with `claude-sonnet-4-20250514`. `model_used` written to state at init.
+Shared OpenAI Responses API client with per-node model selection:
+`gpt-5.4-nano` for glossary extraction and editing, and `gpt-5.4-mini` for
+translation. `model_used` records the routing at workflow initialization.
 
 **Files:** `llm/client.py`
 
 **Definition of done**
-- [ ] All three LLM nodes import from `llm/client.py` — no node instantiates its own Anthropic client
-- [ ] `state['model_used']` is set to `'claude-sonnet-4-20250514'` for every workflow
-- [ ] `from llm.client import get_client` works from any node without circular imports
+- [X] All three LLM nodes import from `llm/client.py` — no node instantiates its own OpenAI client
+- [X] `state['model_used']` records the glossary, translator, and editor models
+- [X] `from novel_translation_backend.llm.client import get_client` works without circular imports
 
 **Agent guardrails**
-- Do not hardcode the API key — read from `ANTHROPIC_API_KEY` env var only
+- Do not hardcode the API key — read from `OPENAI_API_KEY` env var only
 - Do not add retry logic or custom timeouts in phase 1 — use SDK defaults
 - Do not create one client per node call — instantiate once at module load
 

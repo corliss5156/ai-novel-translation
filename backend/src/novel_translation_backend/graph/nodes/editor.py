@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from importlib.resources import files
 
 from novel_translation_backend.constants.workflow_status import WORKFLOW_STATUS_EDITING
 from novel_translation_backend.graph.state import WorkflowState
+from novel_translation_backend.llm.client import NANO_MODEL, invoke
 
 
 MAX_EDITOR_PROMPT_CHARACTERS = 20_000
@@ -16,29 +16,12 @@ EDITOR_FEEDBACK_MARKER = "{{EDITOR_FEEDBACK}}"
 INVALID_EDITED_TEXT_MARKER = "{{INVALID_EDITED_TEXT}}"
 VALIDATION_FAILURES_MARKER = "{{VALIDATION_FAILURES}}"
 
-EditorLlmCallable = Callable[[str], str]
-
-_editor_llm: EditorLlmCallable | None = None
-
-
-def configure_editor_llm(invoke: EditorLlmCallable) -> None:
-    """Configure the provider-independent LLM callable used by this node."""
-    global _editor_llm
-    _editor_llm = invoke
-
-
 def editor_node(state: WorkflowState) -> WorkflowState:
     state["status"] = WORKFLOW_STATUS_EDITING
 
     translated_text = state["translated_text"]
     if translated_text is None or not translated_text.strip():
         raise ValueError("translated_text must be non-empty before editing")
-    if _editor_llm is None:
-        raise RuntimeError(
-            "Editor LLM is not configured. "
-            "Call configure_editor_llm() before running the workflow."
-        )
-
     invalid_edited_text: str | None = None
     validation_failures: list[str] = []
     for attempt in range(MAX_EDITOR_CORRECTION_RETRIES + 1):
@@ -48,7 +31,7 @@ def editor_node(state: WorkflowState) -> WorkflowState:
             invalid_edited_text=invalid_edited_text,
             validation_failures=validation_failures,
         )
-        edited_text = _validate_non_empty_response(_editor_llm(prompt))
+        edited_text = _validate_non_empty_response(invoke(prompt, model=NANO_MODEL))
         validation_failures = _formatting_failures(edited_text)
         if not validation_failures:
             state["edited_text"] = edited_text

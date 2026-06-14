@@ -8,6 +8,7 @@ dependencies = [
     "boto3",
     "fastapi",
     "langgraph",
+    "openai",
     "psycopg[binary]",
     "sqlalchemy",
     "uvicorn",
