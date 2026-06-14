@@ -227,7 +227,7 @@ Node calls the S3 storage function programmatically (not via LLM) to fetch raw C
 
 ### E2-T5 · Glossary DB write node `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T2 · E2-T1
 
@@ -240,10 +240,10 @@ the approved term is inserted.
 **Files:** `graph/nodes/glossary_db_write.py` · `db/glossary_repo.py`
 
 **Definition of done**
-- [ ] A newly approved term has `status='approved'` and its approved English value populated in the DB after node runs
-- [ ] Pending and rejected terms are removed from `state['glossary_terms']` and are never written to the DB
-- [ ] `translated_at_chapter` is set on newly approved terms to `state['chapter_number']`
-- [ ] Node is idempotent: running it twice with the same state produces the same DB state
+- [X] A newly approved term has `status='approved'` and its approved English value populated in the DB after node runs
+- [X] Pending and rejected terms are removed from `state['glossary_terms']` and are never written to the DB
+- [X] `translated_at_chapter` is set on newly approved terms to `state['chapter_number']`
+- [X] Node is idempotent: running it twice with the same state produces the same DB state
 
 **Agent guardrails**
 - Do not write pending or rejected terms to the DB
@@ -256,7 +256,7 @@ the approved term is inserted.
 
 ### E2-T6 · Complete node `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T2 · E1-T3 · E2-T1
 
@@ -266,10 +266,10 @@ Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via the storage 
 **Files:** `graph/nodes/complete.py`
 
 **Definition of done**
-- [ ] After node runs, S3 object at `translated/<novel>/chapter-NNN.md` exists and contains `state['final_text']`
-- [ ] `state['completed_at']` is an ISO 8601 timestamp string
-- [ ] `state['status']` is set to `'complete'`
-- [ ] Node performs no DB calls
+- [X] After node runs, S3 object at `translated/<novel>/chapter-NNN.md` exists and contains `state['final_text']`
+- [X] `state['completed_at']` is an ISO 8601 timestamp string
+- [X] `state['status']` is set to `'complete'`
+- [X] Node performs no DB calls
 
 **Agent guardrails**
 - Do not overwrite an existing translated chapter — raise if object exists
@@ -286,15 +286,15 @@ Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via the storage 
 **Dependencies:** E2-T3
 
 **Description**
-Implement both `interrupt()` call sites. Glossary review pauses after `glossary_extractor`. Final review pauses after `editor`. Each interrupt encodes the pending decision type in state.
+Implement both `interrupt()` call sites. Glossary review pauses after `glossary_extractor`. Final review pauses after `editor`. Each interrupt encodes the pending decision type. Compile the graph with `InMemorySaver` and resume with `Command(update=state, resume=payload)` so API changes made to the in-memory state are included in the resumed graph.
 
 **Files:** `graph/nodes/hitl_glossary.py` · `graph/nodes/hitl_final.py`
 
 **Definition of done**
-- [ ] Graph pauses at `hitl_glossary` when invoked — status becomes `'glossary_review'` and graph does not advance
-- [ ] Calling `resume()` with a glossary decision advances the graph to `glossary_db_write`
-- [ ] Graph pauses at `hitl_final` — status becomes `'final_review'` and graph does not advance
-- [ ] Calling `resume()` with `action='revise'` routes back to `editor` with `editor_feedback` populated in state
+- [X] Graph pauses at `hitl_glossary` when invoked — status becomes `'glossary_review'` and graph does not advance
+- [X] Calling `resume()` with a glossary decision advances the graph to `glossary_db_write`
+- [X] Graph pauses at `hitl_final` — status becomes `'final_review'` and graph does not advance
+- [X] Calling `resume()` with `action='revise'` routes back to `editor` with `editor_feedback` populated in state
 
 **Agent guardrails**
 - Do not implement any LLM calls inside HITL nodes — they are pure control-flow nodes
@@ -486,7 +486,7 @@ async def get_status(workflow_id: str):
 **Dependencies:** E2-T7 · E4-T1
 
 **Description**
-Accepts `{workflow_id, decisions: [{term_id, action: approve|reject, approved_english}]}`. Writes decisions into `state.glossary_terms`. Calls `langgraph.resume()`. Returns `{ok: true}`.
+Accepts `{workflow_id, decisions: [{term_id, action: approve|reject, approved_english}]}`. Writes decisions into `state.glossary_terms`. Calls `resume_graph()` with the review payload. Returns `{ok: true}`.
 
 **Files:** `api/routes/review.py`
 
@@ -512,7 +512,7 @@ Accepts `{workflow_id, decisions: [{term_id, action: approve|reject, approved_en
 **Dependencies:** E2-T7 · E4-T1
 
 **Description**
-Accepts `{workflow_id, action: approve|revise, feedback?: str}`. If `revise`, writes `feedback` into `state.editor_feedback`. Calls `langgraph.resume()`. Returns `{ok: true}`.
+Accepts `{workflow_id, action: approve|revise, feedback?: str}`. If `revise`, writes `feedback` into `state.editor_feedback`. Calls `resume_graph()` with the review payload. Returns `{ok: true}`.
 
 **Files:** `api/routes/review.py`
 

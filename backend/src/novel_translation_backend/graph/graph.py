@@ -1,5 +1,6 @@
 from typing import Literal
 
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from novel_translation_backend.constants.workflow_status import (
@@ -9,14 +10,14 @@ from novel_translation_backend.constants.workflow_status import (
 from novel_translation_backend.graph.nodes.placeholders import (
     editor_node,
     glossary_extractor_node,
-    hitl_final_node,
-    hitl_glossary_node,
     translator_node,
 )
 from novel_translation_backend.graph.nodes.complete import complete_node
 from novel_translation_backend.graph.nodes.glossary_db_write import (
     glossary_db_write_node,
 )
+from novel_translation_backend.graph.nodes.hitl_final import hitl_final_node
+from novel_translation_backend.graph.nodes.hitl_glossary import hitl_glossary_node
 from novel_translation_backend.graph.nodes.s3_retrieval import s3_retrieval_node
 from novel_translation_backend.graph.state import WorkflowState
 
@@ -56,6 +57,7 @@ workflow.add_edge("editor", "hitl_final")
 workflow.add_conditional_edges("hitl_final", route_final_review)
 workflow.add_edge("complete", END)
 
-graph = workflow.compile()
+checkpointer = InMemorySaver()
+graph = workflow.compile(checkpointer=checkpointer)
 
 # graph.get_graph().draw_mermaid_png(output_file_path="graph_output.png")

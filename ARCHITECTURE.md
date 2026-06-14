@@ -141,7 +141,7 @@ def translator_node(state: WorkflowState) -> WorkflowState:
 
 ## Human-in-the-Loop Pattern
 
-Both checkpoints use LangGraph's `interrupt()` primitive. The graph pauses, and waits. The human interacts with the Next.js web UI. The UI calls a FastAPI endpoint. The endpoint writes the human's decision into state and calls LangGraph's `resume()`. The graph continues from the exact node it paused at.
+Both checkpoints use LangGraph's `interrupt()` primitive. The graph pauses, and waits. The human interacts with the Next.js web UI. The UI calls a FastAPI endpoint. The endpoint writes the human's decision into the in-memory state and resumes the graph with `Command(update=state, resume=payload)`. The graph continues from the exact node it paused at.
 
 **The human never writes to state directly.** The FastAPI backend is the boundary between the human world and the agent world.
 
@@ -149,13 +149,13 @@ Both checkpoints use LangGraph's `interrupt()` primitive. The graph pauses, and 
 Human action in UI
   → POST /api/review/glossary  (or /api/review/final)
     → FastAPI writes decisions into state
-      → langgraph.resume(workflow_id)
+      → Command(update=state, resume=payload)
         → next node runs
 ```
 
 ### Phase 1 constraint
 
-State is held **in-memory only** (module-level dict in `graph/runner.py`). A server restart kills all in-flight workflows. This is acceptable for phase 1 (local dev / demo). A LangGraph Postgres checkpointer for true resumability is a phase 2 improvement.
+State is held **in-memory only** using the module-level dict in `graph/runner.py` and LangGraph's `InMemorySaver` for interrupt checkpoints. A server restart kills all in-flight workflows. This is acceptable for phase 1 (local dev / demo). A LangGraph Postgres checkpointer for true resumability is a phase 2 improvement.
 
 ---
 
@@ -168,7 +168,7 @@ FastAPI process
   ├── HTTP request handlers (routes/)
   ├── state_store: dict[workflow_id → WorkflowState]   # module-level
   └── asyncio background tasks (one per active workflow)
-        └── graph.ainvoke(state, config={"thread_id": workflow_id})
+        └── graph.ainvoke(state, config={"configurable": {"thread_id": workflow_id}})
 ```
 
 ### Runner pattern (graph/runner.py)
@@ -176,9 +176,12 @@ FastAPI process
 The runner wraps every graph invocation in `try/except`. Any unhandled exception from any node writes `status="error"` and `error_detail=str(exc)` to state before re-raising. This guarantees the status polling endpoint never returns a frozen status.
 
 ```python
-async def run_graph(workflow_id: str, initial_state: WorkflowState):
+async def run_graph(workflow_id: str, graph_input: WorkflowState | Command):
     try:
-        await graph.ainvoke(initial_state, config={"thread_id": workflow_id})
+        config = {"configurable": {"thread_id": workflow_id}}
+        await graph.ainvoke(graph_input, config=config)
+        snapshot = await graph.aget_state(config)
+        state_store[workflow_id] = snapshot.values
     except Exception as exc:
         state_store[workflow_id]["status"] = "error"
         state_store[workflow_id]["error_detail"] = str(exc)
