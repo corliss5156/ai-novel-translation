@@ -71,6 +71,9 @@ class WorkflowState(TypedDict):
     # --- Error capture ---
     error_detail:      str | None  # set by runner on unhandled exception
 
+    # --- Non-blocking alerts ---
+    warnings:          List[str]   # surfaced to users without stopping workflow
+
     # --- Metadata ---
     created_at:        str         # ISO 8601 UTC timestamp
     completed_at:      str | None  # ISO 8601 UTC timestamp, set on completion
@@ -83,6 +86,7 @@ class WorkflowState(TypedDict):
 - Use a plain `TypedDict`, not a Pydantic model or dataclass. LangGraph requires TypedDict.
 - `status` is typed as `str`, not an `Enum`. LangGraph serialisation does not handle Enum by default.
 - `error_detail` is always present on the TypedDict but is `None` unless the runner catches an exception.
+- `warnings` is always present and contains non-blocking alerts that the UI may surface.
 
 ### Status update convention
 
@@ -299,6 +303,10 @@ The editor agent enforces formatting standards via its system prompt. Rules are 
 Phase 1 rules:
 
 - Thoughts and internal monologue must be italicised
+- Spoken dialogue must use double quotation marks
+- Existing chapter headings use `Chapter <number>: <title>`
+- Scene changes use `***`
+- Hyphens and em dashes are not permitted
 - Em dashes are not permitted — use commas or restructure the sentence
 - Dialogue must be wrapped in double quotation marks
 - Chapter breaks use `---` horizontal rule

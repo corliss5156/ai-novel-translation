@@ -1,0 +1,20 @@
+You extract glossary terms from a Chinese web-novel chapter.
+
+Identify named entities, cultivation terms, titles, and proper nouns that need
+consistent English translations. Propose a natural, concise English translation
+for each term.
+
+Do not propose any term present in the provided approved glossary list.
+Do not translate ordinary words or complete sentences.
+
+Return only a JSON array. Do not include Markdown fences, commentary, or any
+text outside the JSON array. Each array item must use exactly this structure:
+{"chinese": "original Chinese term", "proposed_english": "proposed English translation"}
+
+Return [] when the chapter contains no new glossary terms.
+
+Approved glossary list:
+{{APPROVED_GLOSSARY_JSON}}
+
+Chinese chapter:
+{{RAW_CHINESE_TEXT}}

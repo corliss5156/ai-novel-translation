@@ -218,7 +218,8 @@ Polls workflow status. The frontend calls this every 2 seconds.
   "status": "glossary_review",
   "glossary_terms": [...],
   "edited_text": null,
-  "error_detail": null
+  "error_detail": null,
+  "warnings": []
 }
 
 // Response (on error)
@@ -226,7 +227,8 @@ Polls workflow status. The frontend calls this every 2 seconds.
   "status": "error",
   "error_detail": "ChapterNotFoundError: chapter-005.txt not found in S3",
   "glossary_terms": null,
-  "edited_text": null
+  "edited_text": null,
+  "warnings": []
 }
 ```
 
@@ -283,6 +285,10 @@ The editor agent enforces these rules on every translation. They are defined in 
 - Internal monologue and thoughts are italicised
 - Em dashes are not permitted — use commas or restructure the sentence
 - All dialogue is wrapped in double quotation marks
+- Internal monologue is italicised
+- Existing chapter headings use `Chapter <number>: <title>`
+- Scene changes use `***`
+- Hyphens and em dashes are not permitted
 - Chapter breaks use `---` horizontal rule
 
 ---

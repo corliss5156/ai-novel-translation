@@ -7,18 +7,18 @@ from novel_translation_backend.constants.workflow_status import (
     WORKFLOW_STATUS_REJECTED,
     WORKFLOW_STATUS_REVISE,
 )
-from novel_translation_backend.graph.nodes.placeholders import (
-    editor_node,
+from novel_translation_backend.graph.nodes.glossary_extractor import (
     glossary_extractor_node,
-    translator_node,
 )
 from novel_translation_backend.graph.nodes.complete import complete_node
+from novel_translation_backend.graph.nodes.editor import editor_node
 from novel_translation_backend.graph.nodes.glossary_db_write import (
     glossary_db_write_node,
 )
 from novel_translation_backend.graph.nodes.hitl_final import hitl_final_node
 from novel_translation_backend.graph.nodes.hitl_glossary import hitl_glossary_node
 from novel_translation_backend.graph.nodes.s3_retrieval import s3_retrieval_node
+from novel_translation_backend.graph.nodes.translator import translator_node
 from novel_translation_backend.graph.state import WorkflowState
 
 

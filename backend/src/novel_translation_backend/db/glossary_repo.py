@@ -12,6 +12,39 @@ from novel_translation_backend.db.session import get_session_factory
 from novel_translation_backend.graph.state import GlossaryTerm
 
 
+def get_approved_glossary_terms(novel_name: str) -> list[GlossaryTerm]:
+    """Load approved terms for one novel without modifying the database."""
+    statement = text(
+        """
+        SELECT chinese, english
+        FROM glossary
+        WHERE novel_name = :novel_name
+          AND status = :approved_status
+        ORDER BY created_at, id
+        """
+    )
+
+    with get_session_factory()() as session:
+        rows = session.execute(
+            statement,
+            {
+                "novel_name": novel_name,
+                "approved_status": GLOSSARY_STATUS_APPROVED,
+            },
+        ).mappings()
+
+        return [
+            GlossaryTerm(
+                chinese=row["chinese"],
+                proposed_english=row["english"],
+                approved_english=row["english"],
+                status=GLOSSARY_STATUS_APPROVED,
+                is_new=False,
+            )
+            for row in rows
+        ]
+
+
 def apply_glossary_decisions(
     novel_name: str,
     chapter_number: int,

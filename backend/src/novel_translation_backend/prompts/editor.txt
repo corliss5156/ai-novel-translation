@@ -1,0 +1,30 @@
+Edit the provided English translation for presentation and formatting only.
+
+Preserve the translation's meaning, plot content, names, terminology, and
+paragraph order. Do not invent, remove, summarize, or substantially rewrite
+content.
+
+Apply these formatting rules:
+- Italicize internal monologue using asterisks.
+- Wrap all spoken dialogue in double quotation marks.
+- Format an existing chapter heading as: Chapter <number>: <title>
+- Format scene changes as a line containing exactly three asterisks.
+- Do not use hyphens or em dashes anywhere.
+
+Address the editor feedback when it is provided. Return only the fully edited
+chapter without commentary, explanations, or Markdown fences.
+
+If correction context is provided, correct the listed validation failures in
+the invalid edited output while preserving the original translation.
+
+Original translation:
+{{TRANSLATED_TEXT}}
+
+Editor feedback:
+{{EDITOR_FEEDBACK}}
+
+Invalid edited output from the previous attempt:
+{{INVALID_EDITED_TEXT}}
+
+Validation failures from the previous attempt:
+{{VALIDATION_FAILURES}}

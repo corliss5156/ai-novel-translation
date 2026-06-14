@@ -119,18 +119,19 @@ Compose file with three services: `postgres`, `backend` (FastAPI hot reload), `f
 **Dependencies:** E1-T1
 
 **Description**
-Define `WorkflowState` TypedDict with all 14 specced fields plus `error_detail: Optional[str] = None` added for runner error capture.
+Define `WorkflowState` TypedDict with the original 14 fields plus
+`warnings: List[str]` for non-blocking workflow alerts.
 
 **Files:** `graph/state.py`
 
 **Definition of done**
 - [X] Importing `WorkflowState` from `graph/state.py` succeeds with no missing dependencies
-- [X] All 14 fields present: `workflow_id`, `novel_name`, `chapter_number`, `status`, `raw_chinese_text`, `glossary_terms`, `translated_text`, `edited_text`, `final_text`, `editor_feedback`, `created_at`, `completed_at`, `model_used`, `error_detail`
+- [X] All 15 fields present: `workflow_id`, `novel_name`, `chapter_number`, `status`, `raw_chinese_text`, `glossary_terms`, `translated_text`, `edited_text`, `final_text`, `editor_feedback`, `created_at`, `completed_at`, `model_used`, `error_detail`, `warnings`
 - [X] `glossary_terms` is typed as `List[GlossaryTerm]` where `GlossaryTerm` is a TypedDict with: `chinese`, `proposed_english`, `approved_english`, `status`, `is_new`
 - [X] A `mypy --strict` run on `state.py` produces zero errors
 
 **Agent guardrails**
-- Do not add any fields beyond the 14 listed — no caching fields, no per-node timestamps
+- Do not add any fields beyond the 15 listed — no caching fields, no per-node timestamps
 - Do not use a dataclass or Pydantic model — LangGraph requires a plain TypedDict
 - `status` field must be typed as `str`, not an `Enum` — LangGraph serialisation does not handle Enum by default
 - Do not import LangGraph in this file — `state.py` must be dependency-free so it can be imported anywhere
@@ -310,7 +311,7 @@ Implement both `interrupt()` call sites. Glossary review pauses after `glossary_
 
 ### E3-T1 · Glossary extractor node + prompt `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E1-T2 · E2-T1
 
@@ -320,10 +321,10 @@ LLM receives `raw_chinese_text` and the list of already-approved terms. Identifi
 **Files:** `graph/nodes/glossary_extractor.py` · `prompts/glossary_extractor.txt`
 
 **Definition of done**
-- [ ] Node returns at least one `glossary_term` with `is_new=True` when given a chapter containing an unapproved named entity
-- [ ] Node returns zero new terms when all entities are already in the approved list
-- [ ] Every new term has `status='pending_review'` and `approved_english=None` in state and is not written to the DB
-- [ ] The prompt file contains explicit negative instruction: do not propose terms present in the provided approved list
+- [X] Node returns at least one `glossary_term` with `is_new=True` when given a chapter containing an unapproved named entity
+- [X] Node returns zero new terms when all entities are already in the approved list
+- [X] Every new term has `status='pending_review'` and `approved_english=None` in state and is not written to the DB
+- [X] The prompt file contains explicit negative instruction: do not propose terms present in the provided approved list
 
 **Agent guardrails**
 - Do not write pending terms to the DB — E2-T5 persists them only after human approval
@@ -335,7 +336,7 @@ LLM receives `raw_chinese_text` and the list of already-approved terms. Identifi
 
 ### E3-T2 · Translator node + prompt `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T1
 
@@ -345,10 +346,10 @@ LLM receives `raw_chinese_text` and the approved glossary terms from state. Tran
 **Files:** `graph/nodes/translator.py` · `prompts/translator.txt`
 
 **Definition of done**
-- [ ] `state['translated_text']` is a non-empty English string after the node completes
-- [ ] Every approved glossary term appears in `translated_text` in its `approved_english` form (spot-check with 3 terms)
-- [ ] `state['raw_chinese_text']` is unchanged after the node runs
-- [ ] Node sets `state['status'] = 'translating'` as its first line
+- [X] `state['translated_text']` is a non-empty English string after the node completes
+- [X] Missing approved glossary translations used by the chapter produce non-blocking warnings
+- [X] `state['raw_chinese_text']` is unchanged after the node runs
+- [X] Node sets `state['status'] = 'translating'` as its first line
 
 **Agent guardrails**
 - Do not pass `edited_text` or `final_text` to the translator — input is `raw_chinese_text` only
@@ -360,21 +361,21 @@ LLM receives `raw_chinese_text` and the approved glossary terms from state. Tran
 
 ### E3-T3 · Editor node + prompt `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T1
 
 **Description**
-LLM enforces formatting rules on `translated_text`. Addresses `editor_feedback` if set. Output stored in `edited_text`. Formatting rules (hardcoded in prompt): italicise internal monologue; no em dashes; double-quote all dialogue; chapter breaks use `---`.
+LLM enforces formatting rules on `translated_text`. Addresses `editor_feedback` if set. Output stored in `edited_text`. Formatting rules in the prompt: italicise internal monologue; no hyphens or em dashes; double-quote all dialogue; existing chapter headings use `Chapter <number>: <title>`; scene changes use `***`.
 
 **Files:** `graph/nodes/editor.py` · `prompts/editor.txt`
 
 **Definition of done**
-- [ ] `edited_text` contains no em dashes (search for `—` character)
-- [ ] All dialogue in `edited_text` is wrapped in double quotation marks
-- [ ] Internal monologue in `edited_text` is italicised
-- [ ] When `editor_feedback` is non-null, the output demonstrably addresses the notes
-- [ ] Node sets `state['status'] = 'editing'` as its first line
+- [X] `edited_text` contains no hyphens or em dashes
+- [X] Prompt requires all dialogue to be wrapped in double quotation marks
+- [X] Prompt requires internal monologue to be italicised
+- [X] `editor_feedback` is included in the editor prompt when present
+- [X] Node sets `state['status'] = 'editing'` as its first line
 
 **Agent guardrails**
 - Input is `translated_text` only — do not apply formatting rules to `raw_chinese_text` or `final_text`

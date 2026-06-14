@@ -39,6 +39,7 @@ async def start_workflow(request: StartWorkflowRequest) -> StartWorkflowResponse
         completed_at=None,
         model_used="claude-sonnet-4-20250514",
         error_detail=None,
+        warnings=[],
     )
 
     await start_graph(workflow_id, initial_state)

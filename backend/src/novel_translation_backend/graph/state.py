@@ -24,3 +24,4 @@ class WorkflowState(TypedDict):
     completed_at: Optional[str]
     model_used: str
     error_detail: Optional[str]
+    warnings: List[str]

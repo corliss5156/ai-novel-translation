@@ -1,0 +1,20 @@
+Translate the provided Chinese web-novel chapter into natural, fluent English.
+
+Translate faithfully without adding, removing, or inventing plot content. Use
+each provided approved English glossary value exactly whenever its Chinese term
+appears in the chapter.
+
+Return only the translated chapter. Do not add translator notes, commentary,
+explanations, summaries, or chapter headings that are not present in the
+original chapter.
+
+Do not apply editor-specific formatting rules. Preserve the source chapter's
+meaning and paragraph structure.
+Translate the chapter name into the format Chapter number: Chapter name
+Example: Chapter 376: Jin Li's Star 
+
+Approved glossary:
+{{APPROVED_GLOSSARY_JSON}}
+
+Chinese chapter:
+{{RAW_CHINESE_TEXT}}
