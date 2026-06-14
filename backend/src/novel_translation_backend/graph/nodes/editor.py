@@ -39,10 +39,16 @@ def editor_node(state: WorkflowState) -> WorkflowState:
         invalid_edited_text = edited_text
 
     failures = "; ".join(validation_failures)
-    raise ValueError(
+    if invalid_edited_text is None:
+        raise RuntimeError("Editor exhausted retries without producing text")
+
+    state["edited_text"] = invalid_edited_text
+    warning = (
         "Editor response failed formatting validation after "
         f"{MAX_EDITOR_CORRECTION_RETRIES + 1} attempts: {failures}"
     )
+    state["warnings"] = list(dict.fromkeys([*state["warnings"], warning]))
+    return state
 
 
 def _build_prompt(

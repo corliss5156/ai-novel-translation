@@ -37,8 +37,7 @@ def _chapter_key(prefix: str, novel_name: str, chapter_number: int) -> str:
     if chapter_number < 1:
         raise ValueError("chapter_number must be greater than zero")
 
-    extension = "txt" if prefix == RAW_PREFIX else "md"
-    return f"{prefix}/{novel_name}/chapter-{chapter_number:04d}.{extension}"
+    return f"{prefix}/{novel_name}/chapter-{chapter_number:04d}.txt"
 
 
 def fetch_chapter(novel_name: str, chapter_number: int) -> str:
@@ -72,7 +71,7 @@ def upload_chapter(novel_name: str, chapter_number: int, content: str) -> None:
             Bucket=bucket,
             Key=key,
             Body=content.encode("utf-8"),
-            ContentType="text/markdown; charset=utf-8",
+            ContentType="text/plain; charset=utf-8",
             IfNoneMatch="*",
         )
     except ClientError as exc:

@@ -4,6 +4,7 @@ from typing import List, Optional, TypedDict
 class GlossaryTerm(TypedDict):
     chinese: str
     proposed_english: str
+    description: str
     approved_english: Optional[str]
     status: str
     is_new: bool

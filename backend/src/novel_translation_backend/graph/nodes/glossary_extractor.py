@@ -13,60 +13,39 @@ from novel_translation_backend.llm.client import NANO_MODEL, invoke
 
 
 MAX_GLOSSARY_PROMPT_CHARACTERS = 20_000
-APPROVED_GLOSSARY_MARKER = "{{APPROVED_GLOSSARY_JSON}}"
+MAX_DESCRIPTION_WORDS = 10
 RAW_CHINESE_TEXT_MARKER = "{{RAW_CHINESE_TEXT}}"
 
+
 def glossary_extractor_node(state: WorkflowState) -> WorkflowState:
-    approved_terms = _deduplicate_approved_terms(
-        get_approved_glossary_terms(state["novel_name"])
+    prompt = _build_prompt(state["raw_chinese_text"])
+    extracted_terms = _parse_proposed_terms(invoke(prompt, model=NANO_MODEL))
+    approved_terms = get_approved_glossary_terms(
+        state["novel_name"],
+        [term["chinese"] for term in extracted_terms],
     )
-    prompt = _build_prompt(state["raw_chinese_text"], approved_terms)
 
-    proposed_terms = _parse_proposed_terms(invoke(prompt, model=NANO_MODEL))
-    approved_chinese = {term["chinese"] for term in approved_terms}
-    new_terms = [
-        term for term in proposed_terms if term["chinese"] not in approved_chinese
+    approved_by_chinese = {
+        term["chinese"].strip(): term for term in approved_terms
+    }
+    state["glossary_terms"] = [
+        approved_by_chinese.get(term["chinese"], term)
+        for term in extracted_terms
     ]
-
-    state["glossary_terms"] = [*approved_terms, *new_terms]
     return state
 
 
-def _build_prompt(
-    raw_chinese_text: str,
-    approved_terms: list[GlossaryTerm],
-) -> str:
+def _build_prompt(raw_chinese_text: str) -> str:
     prompt_template = (
         files("novel_translation_backend.prompts")
         .joinpath("glossary_extractor.txt")
         .read_text(encoding="utf-8")
         .strip()
     )
-    missing_markers = [
-        marker
-        for marker in (APPROVED_GLOSSARY_MARKER, RAW_CHINESE_TEXT_MARKER)
-        if marker not in prompt_template
-    ]
-    if missing_markers:
-        raise RuntimeError(
-            "Glossary extractor prompt is missing required markers: "
-            + ", ".join(missing_markers)
-        )
+    if RAW_CHINESE_TEXT_MARKER not in prompt_template:
+        raise RuntimeError("Glossary extractor prompt is missing raw Chinese marker")
 
-    approved_payload = [
-        {
-            "chinese": term["chinese"],
-            "approved_english": term["approved_english"],
-        }
-        for term in approved_terms
-    ]
-    prompt = prompt_template.replace(
-        APPROVED_GLOSSARY_MARKER,
-        json.dumps(approved_payload, ensure_ascii=False),
-    ).replace(
-        RAW_CHINESE_TEXT_MARKER,
-        raw_chinese_text,
-    )
+    prompt = prompt_template.replace(RAW_CHINESE_TEXT_MARKER, raw_chinese_text)
     if len(prompt) > MAX_GLOSSARY_PROMPT_CHARACTERS:
         raise ValueError(
             "Glossary extractor prompt exceeds the "
@@ -94,14 +73,15 @@ def _parse_proposed_terms(response: str) -> list[GlossaryTerm]:
             raise ValueError(
                 f"Glossary extractor item {index} must be a JSON object"
             )
-        if set(item) != {"chinese", "proposed_english"}:
+        if set(item) != {"chinese", "proposed_english", "description"}:
             raise ValueError(
                 "Glossary extractor item "
-                f"{index} must contain only chinese and proposed_english"
+                f"{index} must contain only chinese, proposed_english, and description"
             )
 
         chinese = item["chinese"]
         proposed_english = item["proposed_english"]
+        description = item["description"]
         if not isinstance(chinese, str) or not chinese.strip():
             raise ValueError(
                 f"Glossary extractor item {index} requires non-empty chinese"
@@ -111,32 +91,28 @@ def _parse_proposed_terms(response: str) -> list[GlossaryTerm]:
                 "Glossary extractor item "
                 f"{index} requires non-empty proposed_english"
             )
+        if not isinstance(description, str) or not description.strip():
+            raise ValueError(
+                f"Glossary extractor item {index} requires non-empty description"
+            )
+
+        normalized_description = description.strip()
+        if len(normalized_description.split()) > MAX_DESCRIPTION_WORDS:
+            raise ValueError(
+                "Glossary extractor item "
+                f"{index} description must contain at most "
+                f"{MAX_DESCRIPTION_WORDS} words"
+            )
 
         normalized_chinese = chinese.strip()
         if normalized_chinese not in terms_by_chinese:
             terms_by_chinese[normalized_chinese] = GlossaryTerm(
                 chinese=normalized_chinese,
                 proposed_english=proposed_english.strip(),
+                description=normalized_description,
                 approved_english=None,
                 status=GLOSSARY_STATUS_PENDING_REVIEW,
                 is_new=True,
             )
 
-    return list(terms_by_chinese.values())
-
-
-def _deduplicate_approved_terms(
-    approved_terms: list[GlossaryTerm],
-) -> list[GlossaryTerm]:
-    terms_by_chinese: dict[str, GlossaryTerm] = {}
-    for term in approved_terms:
-        normalized_chinese = term["chinese"].strip()
-        if normalized_chinese and normalized_chinese not in terms_by_chinese:
-            terms_by_chinese[normalized_chinese] = GlossaryTerm(
-                chinese=normalized_chinese,
-                proposed_english=term["proposed_english"].strip(),
-                approved_english=term["approved_english"],
-                status=term["status"],
-                is_new=False,
-            )
     return list(terms_by_chinese.values())

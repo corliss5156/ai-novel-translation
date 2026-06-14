@@ -4,6 +4,10 @@ Translate faithfully without adding, removing, or inventing plot content. Use
 each provided approved English glossary value exactly whenever its Chinese term
 appears in the chapter.
 
+Avoid excessive comma-linked clauses. When a Chinese sentence contains multiple a
+ctions or descriptions, restructure it into natural English using appropriate sentence breaks, 
+subordinate clauses, participial phrases, or other fluent constructions
+
 Return only the translated chapter. Do not add translator notes, commentary,
 explanations, summaries, or chapter headings that are not present in the
 original chapter.

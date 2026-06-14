@@ -183,20 +183,20 @@ async def run_graph(workflow_id: str, initial_state: WorkflowState):
 **Dependencies:** E2-T1 · E2-T2
 
 **Description**
-Define the LangGraph `StateGraph`. Wire all nodes in order: `s3_retrieval → glossary_extractor → [interrupt] → glossary_db_write → translator → editor → [interrupt] → complete`. Add conditional edges for the two review loops.
+Define the LangGraph `StateGraph`. Wire all nodes in order: `s3_retrieval → glossary_extractor → [conditional glossary interrupt] → glossary_db_write → translator → editor → [interrupt] → complete`. Skip glossary HITL when extraction produces no new terms. Final review retains its revision loop.
 
 **Files:** `graph/graph.py`
 
 **Definition of done**
 - [X] `graph.get_graph().nodes` returns exactly: `s3_retrieval`, `glossary_extractor`, `hitl_glossary`, `glossary_db_write`, `translator`, `editor`, `hitl_final`, `complete`
 - [X] Invoking the graph with a mock state that auto-approves both HITL checkpoints runs end-to-end without error
-- [X] Glossary review loop: rejecting all terms at `hitl_glossary` routes back to `glossary_extractor`, not forward
+- [X] Glossary review is single-pass: reviewed terms advance to `glossary_db_write` without looping back to extraction
 - [X] Final review loop: requesting revision at `hitl_final` routes back to `editor` with `editor_feedback` set
 
 **Agent guardrails**
 - Do not implement any node logic in this file — `graph.py` wires only. All logic lives in `nodes/`
 - Do not add any nodes not in the spec
-- Conditional edge logic must read only from `state.status` — no external calls in edge functions
+- Conditional edge logic must read only from workflow state — no external calls in edge functions
 - The graph must be compiled (`graph.compile()`) and assigned to a module-level variable so `runner.py` can import it
 
 ---
@@ -287,12 +287,12 @@ Upload `final_text` to S3 at `/translated/<novel>/<chapter>.md` via the storage 
 **Dependencies:** E2-T3
 
 **Description**
-Implement both `interrupt()` call sites. Glossary review pauses after `glossary_extractor`. Final review pauses after `editor`. Each interrupt encodes the pending decision type. Compile the graph with `InMemorySaver` and resume with `Command(update=state, resume=payload)` so API changes made to the in-memory state are included in the resumed graph.
+Implement both `interrupt()` call sites. Glossary review pauses after `glossary_extractor` only when newly extracted terms exist. Final review pauses after `editor`. Each interrupt encodes the pending decision type. Compile the graph with `InMemorySaver` and resume with `Command(update=state, resume=payload)` so API changes made to the in-memory state are included in the resumed graph.
 
 **Files:** `graph/nodes/hitl_glossary.py` · `graph/nodes/hitl_final.py`
 
 **Definition of done**
-- [X] Graph pauses at `hitl_glossary` when invoked — status becomes `'glossary_review'` and graph does not advance
+- [X] Graph pauses at `hitl_glossary` when new terms exist and skips it when no new terms exist
 - [X] Calling `resume()` with a glossary decision advances the graph to `glossary_db_write`
 - [X] Graph pauses at `hitl_final` — status becomes `'final_review'` and graph does not advance
 - [X] Calling `resume()` with `action='revise'` routes back to `editor` with `editor_feedback` populated in state
@@ -316,19 +316,20 @@ Implement both `interrupt()` call sites. Glossary review pauses after `glossary_
 **Dependencies:** E1-T2 · E2-T1
 
 **Description**
-LLM receives `raw_chinese_text` and the list of already-approved terms. Identifies named entities, cultivation terms, titles, and proper nouns. Proposes English translations. Does not re-propose already-approved terms. Node does post-LLM dedup and keeps new terms as `pending_review` in workflow state only.
+LLM receives `raw_chinese_text` and extracts every qualifying glossary term that appears in the chapter without receiving the approved glossary list. The backend validates and deduplicates the extraction, then queries approved terms for only those exact trimmed Chinese candidates. Exact approved matches use the database translation; unmatched terms remain `pending_review` in workflow state only.
 
 **Files:** `graph/nodes/glossary_extractor.py` · `prompts/glossary_extractor.txt`
 
 **Definition of done**
 - [X] Node returns at least one `glossary_term` with `is_new=True` when given a chapter containing an unapproved named entity
-- [X] Node returns zero new terms when all entities are already in the approved list
+- [X] Exact approved database matches are marked `approved` and are not shown for re-review
 - [X] Every new term has `status='pending_review'` and `approved_english=None` in state and is not written to the DB
-- [X] The prompt file contains explicit negative instruction: do not propose terms present in the provided approved list
+- [X] Database lookup is limited to trimmed exact Chinese terms extracted by the LLM
 
 **Agent guardrails**
 - Do not write pending terms to the DB — E2-T5 persists them only after human approval
-- Do not pass `raw_chinese_text` to the LLM without also passing the approved terms list — missing this causes re-proposals
+- Do not pass the approved glossary list to the extractor LLM
+- Do not query the entire approved glossary — query only validated extracted candidates
 - Do not truncate the chapter text silently — if it exceeds the context window, raise a clear error
 - Prompt must specify output format (JSON array) and the node must validate the structure before inserting to DB
 
@@ -376,12 +377,14 @@ LLM enforces formatting rules on `translated_text`. Addresses `editor_feedback` 
 - [X] Prompt requires internal monologue to be italicised
 - [X] `editor_feedback` is included in the editor prompt when present
 - [X] Node sets `state['status'] = 'editing'` as its first line
+- [X] Exhausting formatting correction retries preserves the final editor response, adds a warning, and continues to final review
 
 **Agent guardrails**
 - Input is `translated_text` only — do not apply formatting rules to `raw_chinese_text` or `final_text`
 - Do not overwrite `state['translated_text']` — output goes to `edited_text` only
 - Formatting rules must live in the prompt file, not hardcoded in Python — the prompt file is the single source of truth
 - Do not invent or add plot content not in the translation — editor role is formatting only
+- Do not fail the workflow solely because formatting validation retries are exhausted
 
 ---
 
@@ -416,7 +419,7 @@ translation. `model_used` records the routing at workflow initialization.
 
 ### E4-T1 · POST /api/workflow/start `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T2 · E2-T3
 
@@ -426,10 +429,10 @@ Accepts `{novel_name, chapter_number}`. Generates `workflow_id` (UUID). Initiali
 **Files:** `api/routes/workflow.py`
 
 **Definition of done**
-- [ ] `POST` with `{novel_name: 'test', chapter_number: 1}` returns `{workflow_id: '<uuid>'}` with HTTP 200 within 200ms
-- [ ] A second `POST` immediately after creates a different `workflow_id` — no collision
-- [ ] `state_store` contains the new `workflow_id` within 100ms of the response
-- [ ] Sending an invalid body (missing `novel_name`) returns HTTP 422 with a validation error message
+- [X] `POST` with `{novel_name: 'test', chapter_number: 1}` returns `{workflow_id: '<uuid>'}` with HTTP 200 within 200ms
+- [X] A second `POST` immediately after creates a different `workflow_id` — no collision
+- [X] `state_store` contains the new `workflow_id` within 100ms of the response
+- [X] Sending an invalid body (missing `novel_name`) returns HTTP 422 with a validation error message
 
 **Agent guardrails**
 - Do not block the HTTP response on any LangGraph work — background task only
@@ -441,7 +444,7 @@ Accepts `{novel_name, chapter_number}`. Generates `workflow_id` (UUID). Initiali
 
 ### E4-T2 · GET /api/workflow/{id}/status `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E4-T1
 
@@ -468,11 +471,11 @@ async def get_status(workflow_id: str):
 ```
 
 **Definition of done**
-- [ ] Returns HTTP 404 with `{detail: 'Workflow not found'}` for an unknown `workflow_id`
-- [ ] Returns `{status: 'error', error_detail: '<message>'}` when the runner has caught an exception
-- [ ] Returns `glossary_terms` array (non-null) only when `status='glossary_review'`
-- [ ] Returns `edited_text` (non-null) only when `status='final_review'`
-- [ ] Response time is under 50ms (pure in-memory read, no DB or LLM calls)
+- [X] Returns HTTP 404 with `{detail: 'Workflow not found'}` for an unknown `workflow_id`
+- [X] Returns `{status: 'error', error_detail: '<message>'}` when the runner has caught an exception
+- [X] Returns `glossary_terms` array (non-null) only when `status='glossary_review'`
+- [X] Returns `edited_text` (non-null) only when `status='final_review'`
+- [X] Response time is under 50ms (pure in-memory read, no DB or LLM calls)
 
 **Agent guardrails**
 - Do not make any DB or S3 calls in this endpoint — read from `state_store` only
@@ -484,33 +487,38 @@ async def get_status(workflow_id: str):
 
 ### E4-T3 · POST /api/review/glossary `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T7 · E4-T1
 
 **Description**
-Accepts `{workflow_id, decisions: [{term_id, action: approve|reject, approved_english}]}`. Writes decisions into `state.glossary_terms`. Calls `resume_graph()` with the review payload. Returns `{ok: true}`.
+Accepts `{workflow_id, decisions: [{term_key, action: approve|reject, approved_english}], suggestions?: [{chinese, approved_english}]}` where `term_key` is the term's unique Chinese value within the workflow. Decisions are required only for newly extracted terms. User suggestions are automatically approved. Existing approved terms remain unchanged. The graph skips glossary HITL when there are no new terms and never loops back to extraction after review.
 
 **Files:** `api/routes/review.py`
 
 **Definition of done**
-- [ ] Posting a valid decision payload returns `{ok: true}` with HTTP 200
-- [ ] `state['glossary_terms']` reflects the human decisions immediately after the call
-- [ ] The LangGraph graph advances past `hitl_glossary` after `resume()` is called
-- [ ] Posting with a non-existent `workflow_id` returns HTTP 404
-- [ ] Posting with `action='approve'` but no `approved_english` returns HTTP 422
+- [X] Posting a valid decision payload returns `{ok: true}` with HTTP 200
+- [X] `state['glossary_terms']` reflects the human decisions immediately after the call
+- [X] The LangGraph graph advances past `hitl_glossary` after `resume()` is called
+- [X] Posting with a non-existent `workflow_id` returns HTTP 404
+- [X] Posting with `action='approve'` but no `approved_english` returns HTTP 422
+- [X] Existing approved terms remain unchanged and require no review decision
+- [X] User suggestions are automatically approved and included in persistence
+- [X] A second submission after resume begins returns HTTP 409
 
 **Agent guardrails**
-- Do not allow partial payloads — all terms in state must have a decision before `resume()` is called
-- Do not call `resume()` before writing decisions to state — order matters
+- Do not allow partial payloads — all new terms in state must have a decision before resume
+- Do not accept decisions for existing approved terms
+- Do not resume before writing decisions and auto-approved suggestions to state
 - Do not accept any action values other than `'approve'` or `'reject'`
 - Do not resume a workflow that is not currently paused at `hitl_glossary` — return 409
+- Do not loop back to glossary extraction after review
 
 ---
 
 ### E4-T4 · POST /api/review/final `critical`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E2-T7 · E4-T1
 
@@ -520,10 +528,10 @@ Accepts `{workflow_id, action: approve|revise, feedback?: str}`. If `revise`, wr
 **Files:** `api/routes/review.py`
 
 **Definition of done**
-- [ ] `action='approve'` advances graph to `complete` node
-- [ ] `action='revise'` with feedback text sets `state['editor_feedback']` and routes back to `editor`
-- [ ] `action='revise'` without feedback text returns HTTP 422
-- [ ] Posting with a non-existent `workflow_id` returns HTTP 404
+- [X] `action='approve'` advances graph to `complete` node
+- [X] `action='revise'` with feedback text sets `state['editor_feedback']` and routes back to `editor`
+- [X] `action='revise'` without feedback text returns HTTP 422
+- [X] Posting with a non-existent `workflow_id` returns HTTP 404
 
 **Agent guardrails**
 - Do not accept action values other than `'approve'` or `'revise'`
@@ -535,7 +543,7 @@ Accepts `{workflow_id, action: approve|revise, feedback?: str}`. If `revise`, wr
 
 ### E4-T5 · CORS, error handling, env config `medium`
 
-- [ ] Task complete
+- [X] Task complete
 
 **Dependencies:** E4-T1
 
@@ -545,10 +553,10 @@ CORS middleware allowing the Vite dev origin. Global exception handler returning
 **Files:** `api/main.py` · `api/config.py`
 
 **Definition of done**
-- [ ] A preflight `OPTIONS` request from `http://localhost:5173` returns HTTP 200 with correct CORS headers
-- [ ] An unhandled exception in any route returns `{error: 'Internal server error', detail: '<message>'}` with HTTP 500
-- [ ] Settings loads all required env vars on startup and raises a clear error if any are missing
-- [ ] `uvicorn api.main:app --reload` starts without error with a valid `.env`
+- [X] A preflight `OPTIONS` request from `http://localhost:5173` returns HTTP 200 with correct CORS headers
+- [X] An unhandled exception in any route returns `{error: 'Internal server error', detail: '<message>'}` with HTTP 500
+- [X] Settings loads all required env vars on startup and raises a clear error if any are missing
+- [X] `uvicorn api.main:app --reload` starts without error with a valid `.env`
 
 **Agent guardrails**
 - CORS origin whitelist must be exactly `['http://localhost:5173']` — do not use wildcard `'*'`

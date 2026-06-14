@@ -4,7 +4,6 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from novel_translation_backend.constants.workflow_status import (
-    WORKFLOW_STATUS_REJECTED,
     WORKFLOW_STATUS_REVISE,
 )
 from novel_translation_backend.graph.nodes.glossary_extractor import (
@@ -22,11 +21,11 @@ from novel_translation_backend.graph.nodes.translator import translator_node
 from novel_translation_backend.graph.state import WorkflowState
 
 
-def route_glossary_review(
+def route_after_glossary_extraction(
     state: WorkflowState,
-) -> Literal["glossary_extractor", "glossary_db_write"]:
-    if state["status"] == WORKFLOW_STATUS_REJECTED:
-        return "glossary_extractor"
+) -> Literal["hitl_glossary", "glossary_db_write"]:
+    if any(term["is_new"] for term in state["glossary_terms"]):
+        return "hitl_glossary"
     return "glossary_db_write"
 
 
@@ -49,8 +48,8 @@ workflow.add_node("complete", complete_node)
 
 workflow.add_edge(START, "s3_retrieval")
 workflow.add_edge("s3_retrieval", "glossary_extractor")
-workflow.add_edge("glossary_extractor", "hitl_glossary")
-workflow.add_conditional_edges("hitl_glossary", route_glossary_review)
+workflow.add_conditional_edges("glossary_extractor", route_after_glossary_extraction)
+workflow.add_edge("hitl_glossary", "glossary_db_write")
 workflow.add_edge("glossary_db_write", "translator")
 workflow.add_edge("translator", "editor")
 workflow.add_edge("editor", "hitl_final")
