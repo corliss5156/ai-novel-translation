@@ -1,355 +1,188 @@
-# Wuxia Translation AI
+# AI Novel Translation
 
-An AI-orchestrated pipeline that translates novels from Chinese to English. The system combines LLM agents, human-in-the-loop review checkpoints, a persistent glossary database, and cloud storage — coordinated by a LangGraph state machine.
+An AI-assisted Chinese-to-English novel translation workflow with explicit human review at the decisions that matter.
 
----
+Rather than sending a chapter through a single prompt, the application coordinates glossary extraction, terminology approval, translation, editorial revision, manual editing, and create-only storage through a LangGraph state machine.
 
-## How it works
+FastAPI starts and controls an asynchronous LangGraph workflow
+Next.js presents chapter selection and human review checkpoints
+PostgreSQL stores approved terminology; S3 stores source and approved translated chapters.
 
-A user submits a chapter to translate. The pipeline runs automatically, pausing twice for human review before saving the final output to S3.
+![Final translation review](docs/screenshots/final-review.png)
 
-```
-User submits chapter
-      │
-      ▼
-  S3 retrieval          — fetches raw Chinese text
-      │
-      ▼
-  Glossary extractor    — LLM identifies terms, proposes translations
-      │
-      ▼
-  ⏸  Glossary review    — human approves / edits / rejects terms
-      │
-      ▼
-  Glossary DB write     — persists approved terms
-      │
-      ▼
-  Translator            — LLM translates using approved glossary
-      │
-      ▼
-  Editor                — LLM enforces formatting rules
-      │
-      ▼
-  ⏸  Final review       — human approves or requests revision
-      │
-      ▼
-  Complete              — saves final translation to S3
-```
+## Why This Project
 
----
+Long-form fiction translation needs more than fluent output. Character names, cultivation terms, titles, and recurring concepts must remain consistent across chapters, while an editor still needs control over the final prose.
 
-## Tech stack
+This project demonstrates how to combine LLM automation with human judgment:
+
+- Extract chapter-specific terminology and reuse previously approved translations.
+- Pause the workflow for reviewers to approve, edit, reject, or add glossary terms.
+- Translate with an approved, novel-scoped glossary.
+- Validate editorial formatting and surface non-blocking quality warnings.
+- Let reviewers request another AI revision or manually edit the final text.
+- Save approved translations without silently overwriting existing work.
+
+## Workflow
+
+![Compiled LangGraph translation workflow](docs/screenshots/graph_output.png)
+
+This visualization is generated from the compiled LangGraph workflow in
+`backend/src/novel_translation_backend/graph/graph.py`. Solid edges are direct
+transitions; dotted edges are conditional routes that skip glossary review,
+request another editor pass, or advance to completion.
+
+| Glossary review | Translation complete |
+|---|---|
+| ![Glossary review](docs/screenshots/glossary-review.png) | ![Completed workflow](docs/screenshots/complete.png) |
+
+## Features
+
+### Human in the loop interrupts
+
+The translation lifecycle is an explicit LangGraph graph with two human-in-the-loop interrupts. Each node has a narrow responsibility, and a typed state object makes the data passed between stages inspectable.
+
+### Terminology consistency
+
+Glossary terms are scoped by novel and persisted in PostgreSQL after approval. The translator receives approved matches through workflow state, while missing approved terms are surfaced as review warnings.
+
+### Controlled editorial loop
+
+The editor validates its output and retries corrections finite times before returning a warning. At final review, a human can request another AI editing pass with feedback or switch to manual editing before approval.
+
+### Defensive final saves
+
+Approved chapters are written to S3 with create-only semantics. An identical existing translation is treated as an idempotent success; different existing content produces a conflict instead of being overwritten. Temporary save failures preserve the final text and can be retried from the UI.
+Active workflows and LangGraph checkpoints live in memory. This keeps the local architecture straightforward, but restarting the backend loses in-flight work. Persistent checkpointing is intentionally left as a future  improvement.
+
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Orchestration | LangGraph |
-| LLM | OpenAI Responses API (`gpt-5.4-nano` extraction/editor, `gpt-5.4-mini` translation) |
-| S3 integration | boto3 storage module |
-| Database | PostgreSQL (local via Docker) |
-| API | FastAPI (Python) |
-| Frontend | Next.js |
-| Containerisation | Docker Compose |
+| Workflow orchestration | LangGraph |
+| LLM integration | OpenAI Responses API |
+| Models | `gpt-5.4-nano` for extraction/editing, `gpt-5.4-mini` for translation |
+| API | FastAPI |
+| Frontend | Next.js 16, React 19 |
+| Database | PostgreSQL, SQLAlchemy, Alembic |
+| Object storage | Amazon S3 via boto3 |
+| Local environment | Docker Compose |
 
----
+## Local Setup
 
+### Prerequisites
 
-```
-wuxia-translation-ai/
-├── backend/
-│   ├── api/
-│   │   ├── main.py              # FastAPI app entry point
-│   │   ├── config.py            # Settings / env var loading
-│   │   └── routes/
-│   │       ├── workflow.py      # POST /start, GET /status
-│   │       └── review.py        # POST /review/glossary, /review/final
-│   ├── graph/
-│   │   ├── state.py             # WorkflowState TypedDict
-│   │   ├── graph.py             # LangGraph StateGraph definition
-│   │   ├── runner.py            # asyncio task runner + state_store
-│   │   └── nodes/
-│   │       ├── s3_retrieval.py
-│   │       ├── glossary_extractor.py
-│   │       ├── hitl_glossary.py
-│   │       ├── glossary_db_write.py
-│   │       ├── translator.py
-│   │       ├── editor.py
-│   │       ├── hitl_final.py
-│   │       └── complete.py
-│   ├── db/
-│   │   └── glossary_repo.py     # DB access layer
-│   ├── llm/
-│   │   └── client.py            # Shared OpenAI client singleton
-│   ├── storage/
-│   │   └── s3_chapters.py       # S3 chapter fetch and upload operations
-│   ├── migrations/
-│   │   └── 001_glossary.py      # Alembic migration
-│   ├── models/
-│   │   └── glossary.py          # SQLAlchemy model
-│   └── prompts/
-│       ├── glossary_extractor.txt
-│       ├── translator.txt
-│       └── editor.txt
-├── frontend/
-│   ├── app/                     # Next.js App Router
-│   │   └── page.tsx             # Single-page workflow UI
-│   ├── components/
-│   │   ├── StatusBar.tsx        # Pipeline stage progress bar
-│   │   ├── StartPanel.tsx       # Chapter submission form
-│   │   ├── GlossaryReview.tsx   # Term approval table
-│   │   ├── FinalReview.tsx      # Translation approval + feedback
-│   │   ├── CompletePanel.tsx    # Success + final text display
-│   │   ├── LoadingPanel.tsx     # Spinner for non-interactive states
-│   │   └── ErrorBanner.tsx      # Error display + reset
-│   └── hooks/
-│       └── useWorkflow.ts       # Polling hook for workflow status
-├── infra/
-│   └── (future ECS / Lambda config)
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
+- Docker with Docker Compose
+- OpenAI API key
+- AWS credentials with read/write access to an S3 bucket
 
----
-
-## Prerequisites
-
-- Docker and Docker Compose
-- An OpenAI API key
-- AWS credentials with read/write access to your S3 bucket
-- Node.js 18+ (for local frontend development outside Docker)
-- Python 3.11+ (for local backend development outside Docker)
-
----
-
-## Local setup
-
-### 1. Clone and configure environment
+### 1. Configure the environment
 
 ```bash
-git clone https://github.com/your-org/wuxia-translation-ai.git
-cd wuxia-translation-ai
 cp .env.example .env
 ```
 
-Open `.env` and fill in your values:
+Fill in the required values:
 
 ```env
-OPENAI_API_KEY=sk-...
-DATABASE_URL=postgresql://postgres:postgres@postgres:5432/wuxia
+OPENAI_API_KEY=...
+DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/novel_translation
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=ap-southeast-1
-S3_BUCKET_NAME=wuxia-translation
+AWS_REGION=...
+S3_BUCKET_NAME=...
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=novel_translation
 ```
 
-### 2. Start all services
+### 2. Start the services and migrate the database
 
 ```bash
-docker compose up
-```
-
-This starts three services:
-
-| Service | URL |
-|---|---|
-| Next.js frontend | http://localhost:3000 |
-| FastAPI backend | http://localhost:8000 |
-| PostgreSQL | localhost:5432 |
-
-The backend waits for the database healthcheck before starting.
-
-### 3. Run database migrations
-
-In a separate terminal, once the containers are up:
-
-```bash
+docker compose up --build
 docker compose exec backend alembic upgrade head
 ```
 
-### 4. Open the app
-
-Navigate to [http://localhost:3000](http://localhost:3000). Enter a novel name and chapter number to start a translation workflow.
-
----
-
-## S3 bucket structure
-
-Raw source texts and completed translations are stored in separate prefixes:
-
-```
-s3://translation/
-  raw/
-    <novel-name>/
-      chapter-001.txt
-      chapter-002.txt
-  translated/
-    <novel-name>/
-      chapter-001.md
-      chapter-002.md
-```
-
-Place your raw Chinese chapter files under `raw/<novel-name>/` before running the pipeline. The pipeline reads from `raw/` and writes to `translated/` — it will never overwrite a file in `raw/`.
-
----
-
-## API reference
-
-The FastAPI backend exposes four endpoints. Interactive docs are available at [http://localhost:8000/docs](http://localhost:8000/docs).
-
-### `POST /api/workflow/start`
-
-Starts a new translation workflow.
-
-```json
-// Request
-{ "novel_name": "legendary-moonlight-sculptor", "chapter_number": 5 }
-
-// Response
-{ "workflow_id": "3f7a2c1e-..." }
-```
-
-### `GET /api/workflow/{workflow_id}/status`
-
-Polls workflow status. The frontend calls this every 2 seconds.
-
-```json
-// Response (during glossary review)
-{
-  "status": "glossary_review",
-  "glossary_terms": [...],
-  "edited_text": null,
-  "error_detail": null,
-  "warnings": []
-}
-
-// Response (on error)
-{
-  "status": "error",
-  "error_detail": "ChapterNotFoundError: chapter-005.txt not found in S3",
-  "glossary_terms": null,
-  "edited_text": null,
-  "warnings": []
-}
-```
-
-Possible `status` values: `pending` · `fetching` · `glossary_review` · `translating` · `editing` · `final_review` · `complete` · `error`
-
-### `POST /api/review/glossary`
-
-Submits human decisions on glossary terms.
-
-```json
-{
-  "workflow_id": "3f7a2c1e-...",
-  "decisions": [
-    { "term_id": "abc", "action": "approve", "approved_english": "Sword Saint" },
-    { "term_id": "def", "action": "reject" }
-  ]
-}
-```
-
-### `POST /api/review/final`
-
-Approves the translation or sends it back to the editor with feedback.
-
-```json
-// Approve
-{ "workflow_id": "3f7a2c1e-...", "action": "approve" }
-
-// Request revision
-{ "workflow_id": "3f7a2c1e-...", "action": "revise", "feedback": "The internal monologue in paragraph 3 reads too stiffly. Loosen it." }
-```
-
----
-
-## Glossary behaviour
-
-The glossary is the source of truth for how novel-specific terms are translated consistently across chapters.
-
-| Term status | Behaviour |
+| Service | URL |
 |---|---|
-| `approved` | Silently loaded into the translator's context. Not shown for re-review. |
-| `pending_review` | Shown to the human alongside newly discovered terms for the current chapter. |
-| `rejected` | Dropped from workflow state and never written to the database. Will be re-proposed if encountered in a later chapter. |
+| Review workspace | [http://localhost:5173](http://localhost:5173) |
+| FastAPI documentation | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| PostgreSQL | `localhost:5432` |
 
-The glossary is read from the database once per workflow at extraction time and passed through state to all downstream nodes. No node after the glossary extractor makes a database read.
+### 3. Add source chapters
 
-> **Phase 1 known limitation:** rejected terms are not suppressed in future chapters. Glossary hygiene is managed manually. A rejection suppression mechanism is planned for phase 2.
+The S3 catalog is built from raw chapter objects. Chapter numbers use at least four digits and both source and translated objects are plain-text files.
 
----
+```text
+s3://<bucket>/
+├── raw/
+│   └── <novel-name>/
+│       └── chapter-0001.txt
+└── translated/
+    └── <novel-name>/
+        └── chapter-0001.txt
+```
 
-## Editor formatting rules
+Open the review workspace, select an untranslated chapter, and start the workflow.
 
-The editor agent enforces these rules on every translation. They are defined in `backend/prompts/editor.txt` — edit that file to change them without touching any code.
+## Project Structure
 
-- Internal monologue and thoughts are italicised
-- Em dashes are not permitted — use commas or restructure the sentence
-- All dialogue is wrapped in double quotation marks
-- Internal monologue is italicised
-- Existing chapter headings use `Chapter <number>: <title>`
-- Scene changes use `***`
-- Hyphens and em dashes are not permitted
-- Chapter breaks use `---` horizontal rule
+```text
+.
+├── backend/
+│   ├── src/novel_translation_backend/
+│   │   ├── api/          # FastAPI routes and configuration
+│   │   ├── db/           # Glossary persistence
+│   │   ├── graph/        # LangGraph state, runner, and nodes
+│   │   ├── llm/          # Shared OpenAI client and model routing
+│   │   ├── prompts/      # Versioned extraction, translation, and editor prompts
+│   │   └── storage/      # S3 catalog, reads, and create-only saves
+│   ├── migrations/
+│   └── tests/
+├── frontend/
+│   ├── app/              # Next.js App Router entry points
+│   └── src/              # Workflow components and polling hook
+├── docs/
+├── infra/
+└── docker-compose.yml
+```
 
----
+## API Surface
 
-## Development
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/chapters` | List source chapters and translation status |
+| `GET` | `/api/chapters/{novel}/{chapter}` | Open a completed source/translation pair |
+| `POST` | `/api/workflow/start` | Start a background translation workflow |
+| `GET` | `/api/workflow/{id}/status` | Poll stage-specific workflow state |
+| `POST` | `/api/workflow/{id}/kill` | Cancel and discard an active workflow |
+| `POST` | `/api/workflow/{id}/retry-save` | Retry a temporary final-save failure |
+| `POST` | `/api/review/glossary` | Submit glossary decisions and additions |
+| `POST` | `/api/review/editor` | Request another AI editorial pass |
+| `POST` | `/api/review/final` | Approve manually reviewed final text |
 
-### Running backend only (without Docker)
+## Verification
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn api.main:app --reload --port 8000
+uv run pytest
 ```
 
-### Running frontend only (without Docker)
+Frontend behavior is currently verified manually against the workflow acceptance checklist in [`docs/ui-design.md`](docs/ui-design.md).
+
+Regenerate the workflow visualization from the compiled graph:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd backend
+set -a
+source ../.env
+set +a
+uv run python -c "from novel_translation_backend.graph.graph import graph; graph.get_graph().draw_mermaid_png(output_file_path='../graph_output.png')"
 ```
 
-The Next.js dev server runs on port 3000 and proxies API requests to `http://localhost:8000`.
+The default LangGraph PNG renderer calls `mermaid.ink`, so regeneration requires
+network access.
 
-### Database migrations
+## Architecture
 
-```bash
-# Create a new migration
-cd backend && alembic revision --autogenerate -m "description"
-
-# Apply all pending migrations
-alembic upgrade head
-
-# Roll back one migration
-alembic downgrade -1
-```
-
----
-
-## Architecture decisions
-
-**Why LangGraph?** Human-in-the-loop interrupts are a first-class primitive (`interrupt()` / `resume()`), not bolted on. The workflow is an explicit directed graph — every node and edge is visible in code. State is a single typed dict, making data flow auditable.
-
-**Why is S3 called programmatically rather than via LLM tool use?** Fetching and uploading chapters is deterministic infrastructure work. The node always knows exactly which S3 key to use from state. Letting the LLM invoke the tool adds latency, token cost, and a failure surface with no benefit.
-
-**Why is the glossary cached in state?** The glossary is loaded from the database once at extraction time and passed through state to all downstream nodes. This avoids redundant DB calls in the hot path and keeps agent nodes stateless with respect to persistence.
-
-**Why are LangGraph and FastAPI in the same process?** For simplicity, LangGraph runs as an `asyncio.create_task` inside FastAPI, with workflow state held in a module-level dict. This is intentionally simple — a proper persistence backend (LangGraph's Postgres checkpointer) and process separation are phase 2 work.
-
----
-
-## Improvements
-
-- Resumable workflows across server restarts (LangGraph Postgres checkpointer)
-- Per-node model selection (cheaper model for editor, stronger for translator)
-- `novels` table with foreign key relationship to glossary
-- Rejection suppression — prevent re-proposal of rejected terms in future chapters
-- Formatting rules stored in DB, configurable per novel without code changes
-- Translation update workflow (currently create-only — overwrites are blocked)
-- Glossary term versioning — track changes to approved translations over time
-- AWS ECS deployment
-
----
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the graph lifecycle, state ownership, API contracts, persistence boundaries, failure handling, and known limitations.
