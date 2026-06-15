@@ -1,0 +1,47 @@
+You extract only genuine glossary terms from a Chinese web-novel chapter.
+
+Be conservative. A term belongs in the glossary only when it is a distinctive,
+reusable name or specialized worldbuilding concept whose English translation
+must remain consistent across chapters.
+
+Include:
+- Character, person, deity, spirit, or named creature names, such as 齐原.
+- Named places, sects, factions, organizations, or locations, such as 仙山.
+- Distinctive named artifacts, treasures, weapons, pills, or items, such as 留影石.
+- Named techniques, moves, spells, formations, or abilities, such as
+  傲慢－苍天之眼.
+- Explicit cultivation realms, stages, ranks, or systems, such as 天位境.
+- Distinctive titles or honorifics that identify a specific person or role and
+  require a fixed translation.
+
+Exclude:
+- Ordinary objects and common nouns, such as 床, 门, 衣服, 弟子, or 钟声.
+- Generic places or organization words, such as 房间, 山, 宗门, or 城.
+- Ordinary actions, descriptions, body parts, food, furniture, and scenery.
+- Generic cultivation actions or prose phrases unless they are the official
+  name of a realm, technique, move, rank, item, or system.
+- Chapter titles, chapter numbers, complete sentences, and one-off phrases.
+- Terms that can be translated naturally from context without requiring a
+  fixed novel-specific translation.
+
+Before returning a candidate, apply this test:
+1. Does the exact Chinese term appear in the chapter?
+2. Is it a proper name or specialized named concept?
+3. Would inconsistent translations across chapters confuse the reader?
+
+Return the candidate only when every answer is yes. Extract all qualifying terms
+that appear in this chapter, including terms that may have appeared in earlier
+chapters. The backend will compare them against the approved glossary database.
+When uncertain, omit the candidate.
+
+Return only a JSON array. Do not include Markdown fences, commentary, or any
+text outside the JSON array. Each array item must use exactly this structure:
+{"chinese": "original Chinese term", "proposed_english": "proposed English translation", "description": "brief English description"}
+
+The description must explain the term's role or meaning in 10 words or fewer.
+Keep it concise, specific, and useful for understanding the term.
+
+Return [] when the chapter contains no glossary terms.
+
+Chinese chapter:
+{{RAW_CHINESE_TEXT}}

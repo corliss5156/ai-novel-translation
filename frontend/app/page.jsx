@@ -1,3 +1,5 @@
+import Workspace from "../src/components/Workspace";
+
 export default function Home() {
-  return <main aria-label="AI Novel Translation" />;
+  return <Workspace />;
 }

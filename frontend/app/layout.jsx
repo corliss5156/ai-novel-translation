@@ -1,3 +1,5 @@
+import "./globals.css";
+
 export const metadata = {
   title: "AI Novel Translation",
   description: "AI-assisted novel translation workflow",

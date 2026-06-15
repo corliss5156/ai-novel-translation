@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from novel_translation_backend.api.main import app
 
 
-app = FastAPI(title="AI Novel Translation API")
+__all__ = ["app"]

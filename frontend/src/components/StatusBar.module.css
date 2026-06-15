@@ -1,0 +1,64 @@
+.statusBar {
+  width: 100%;
+  overflow-x: auto;
+  padding: 16px 0;
+}
+
+.stageList {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 8px;
+  min-width: 1120px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8dee8;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #667085;
+  background: #f8fafc;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.marker {
+  display: grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: #475467;
+  background: #e9eef5;
+  font-size: 0.75rem;
+}
+
+.active {
+  border-color: #2563eb;
+  color: #174ea6;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 12%);
+}
+
+.active .marker {
+  color: #fff;
+  background: #2563eb;
+}
+
+.complete {
+  border-color: #b8c9df;
+  color: #344054;
+  background: #fff;
+}
+
+.complete .marker {
+  color: #fff;
+  background: #406b9f;
+}

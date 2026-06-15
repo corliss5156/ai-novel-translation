@@ -1,0 +1,104 @@
+.panel {
+  max-width: 680px;
+  margin: 56px auto;
+  border: 1px solid #dfe4ec;
+  border-radius: 16px;
+  padding: 36px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(16 24 40 / 6%);
+  text-align: center;
+}
+
+.successMark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #2563eb;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.panel h2 {
+  margin: 7px 0 9px;
+  font-size: 1.7rem;
+  letter-spacing: -0.03em;
+}
+
+.summary {
+  margin: 0;
+  color: #667085;
+}
+
+.receipt {
+  display: grid;
+  grid-template-columns: 1.5fr 0.7fr 0.8fr;
+  gap: 1px;
+  overflow: hidden;
+  margin: 28px 0;
+  border: 1px solid #dfe4ec;
+  border-radius: 10px;
+  background: #dfe4ec;
+  text-align: left;
+}
+
+.receipt div {
+  display: grid;
+  gap: 5px;
+  padding: 15px;
+  background: #f8fafc;
+}
+
+.receipt dt {
+  color: #667085;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.receipt dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #273244;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid #1d4ed8;
+  color: #fff;
+  background: #2563eb;
+}
+
+.secondaryButton {
+  border: 1px solid #cfd6e1;
+  color: #344054;
+  background: #fff;
+}

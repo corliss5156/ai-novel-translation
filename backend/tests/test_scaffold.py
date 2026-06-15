@@ -27,7 +27,7 @@ def test_env_example_contains_required_placeholders() -> None:
     env_example = (root / ".env.example").read_text()
 
     for key in [
-        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
         "DATABASE_URL",
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
