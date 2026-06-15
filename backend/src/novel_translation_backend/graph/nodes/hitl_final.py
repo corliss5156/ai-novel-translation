@@ -27,15 +27,17 @@ def hitl_final_node(state: WorkflowState) -> WorkflowState:
     )
     action = _review_action(decision)
     if action == REVIEW_ACTION_REVISE:
-        state["editor_feedback"] = _revision_feedback(decision)
+        feedback = state["editor_feedback"]
+        if feedback is None or not feedback.strip():
+            raise ValueError("editor_feedback must be non-empty before revision")
         state["status"] = WORKFLOW_STATUS_REVISE
-    elif action == REVIEW_ACTION_APPROVE:
-        edited_text = state["edited_text"]
-        if edited_text is None or not edited_text.strip():
-            raise ValueError("edited_text must be non-empty before final approval")
-        state["final_text"] = edited_text
-    else:
+        return state
+    if action != REVIEW_ACTION_APPROVE:
         raise ValueError(f"Unsupported final review action: {action}")
+
+    final_text = state["final_text"]
+    if final_text is None or not final_text.strip():
+        raise ValueError("final_text must be non-empty before final approval")
 
     return state
 
@@ -48,13 +50,3 @@ def _review_action(decision: Any) -> str:
     if not isinstance(action, str):
         raise ValueError("Final review decision requires an action")
     return action
-
-
-def _revision_feedback(decision: Any) -> str:
-    if not isinstance(decision, Mapping):
-        raise ValueError("Final review decision must be an object")
-
-    feedback = decision.get("feedback")
-    if not isinstance(feedback, str) or not feedback.strip():
-        raise ValueError("Revision feedback must be a non-empty string")
-    return feedback

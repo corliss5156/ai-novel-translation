@@ -11,16 +11,19 @@ Apply these formatting rules:
 - Format scene changes as a line containing exactly three asterisks.
 - Do not use hyphens or em dashes anywhere.
 
-Address the editor feedback when it is provided. Return only the fully edited
-chapter without commentary, explanations, or Markdown fences.
+Return only the fully edited chapter without commentary, explanations, or
+Markdown fences.
+
+When human revision feedback is provided, apply it to the supplied latest
+edited chapter while preserving its meaning and content.
 
 If correction context is provided, correct the listed validation failures in
-the invalid edited output while preserving the original translation.
+the invalid edited output while preserving the editor input chapter.
 
-Original translation:
+Editor input chapter:
 {{TRANSLATED_TEXT}}
 
-Editor feedback:
+Human revision feedback:
 {{EDITOR_FEEDBACK}}
 
 Invalid edited output from the previous attempt:

@@ -4,11 +4,13 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 
 from novel_translation_backend.graph.runner import (
+    InvalidEditorReviewFeedbackError,
     InvalidFinalReviewDecisionError,
     InvalidGlossaryDecisionsError,
     WorkflowNotFoundError,
     WorkflowNotPausedForFinalReviewError,
     WorkflowNotPausedForGlossaryReviewError,
+    submit_editor_review,
     submit_final_review,
     submit_glossary_review,
 )
@@ -56,15 +58,23 @@ class ReviewResponse(BaseModel):
 
 class FinalReviewRequest(BaseModel):
     workflow_id: str = Field(min_length=1)
-    action: Literal["approve", "revise"]
-    feedback: str | None = None
+    final_text: str = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_feedback(self) -> "FinalReviewRequest":
-        if self.action == "revise" and (
-            self.feedback is None or not self.feedback.strip()
-        ):
-            raise ValueError("feedback is required when action is revise")
+    def validate_final_text(self) -> "FinalReviewRequest":
+        if not self.final_text.strip():
+            raise ValueError("final_text must be non-empty")
+        return self
+
+
+class EditorReviewRequest(BaseModel):
+    workflow_id: str = Field(min_length=1)
+    feedback: str = Field(min_length=10)
+
+    @model_validator(mode="after")
+    def validate_feedback(self) -> "EditorReviewRequest":
+        if len(self.feedback.strip()) < 10:
+            raise ValueError("feedback must contain at least 10 characters")
         return self
 
 
@@ -124,10 +134,8 @@ async def review_glossary(request: GlossaryReviewRequest) -> ReviewResponse:
 
 @router.post("/final", response_model=ReviewResponse)
 async def review_final(request: FinalReviewRequest) -> ReviewResponse:
-    feedback = request.feedback.strip() if request.feedback is not None else None
-
     try:
-        await submit_final_review(request.workflow_id, request.action, feedback)
+        await submit_final_review(request.workflow_id, request.final_text)
     except WorkflowNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -139,6 +147,29 @@ async def review_final(request: FinalReviewRequest) -> ReviewResponse:
             detail="Workflow is not paused for final review",
         ) from exc
     except InvalidFinalReviewDecisionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return ReviewResponse(ok=True)
+
+
+@router.post("/editor", response_model=ReviewResponse)
+async def review_editor(request: EditorReviewRequest) -> ReviewResponse:
+    try:
+        await submit_editor_review(request.workflow_id, request.feedback)
+    except WorkflowNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workflow not found",
+        ) from exc
+    except WorkflowNotPausedForFinalReviewError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Workflow is not paused for final review",
+        ) from exc
+    except InvalidEditorReviewFeedbackError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),

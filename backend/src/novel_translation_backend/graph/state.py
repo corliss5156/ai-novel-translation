@@ -21,8 +21,11 @@ class WorkflowState(TypedDict):
     edited_text: Optional[str]
     final_text: Optional[str]
     editor_feedback: Optional[str]
+    editor_revision: int
     created_at: str
     completed_at: Optional[str]
     model_used: str
     error_detail: Optional[str]
+    error_stage: Optional[str]
+    error_code: Optional[str]
     warnings: List[str]

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from novel_translation_backend.api.config import settings
+from novel_translation_backend.api.routes.chapters import router as chapters_router
 from novel_translation_backend.api.routes.review import router as review_router
 from novel_translation_backend.api.routes.workflow import router as workflow_router
 
@@ -18,6 +19,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(chapters_router)
 app.include_router(workflow_router)
 app.include_router(review_router)
 

@@ -295,6 +295,8 @@ All `raw/` reads are performed by the S3 retrieval node.
 All `translated/` writes are performed by the complete node.
 `raw/` is read-only from the storage module's perspective — `upload_chapter` must only write to `translated/`.
 Overwriting an existing translated chapter raises an exception (phase 1 is create-only).
+Read-only API endpoints may list chapter keys and fetch raw and translated
+chapter text for the frontend.
 
 ---
 
@@ -327,8 +329,11 @@ Phase 1 rules:
 |---|---|---|
 | `POST` | `/api/workflow/start` | Start a new workflow. Returns `{workflow_id}`. |
 | `GET` | `/api/workflow/{id}/status` | Poll workflow status and payload. |
+| `POST` | `/api/workflow/{id}/kill` | Cancel an active workflow. |
 | `POST` | `/api/review/glossary` | Submit glossary term decisions. Resumes graph. |
 | `POST` | `/api/review/final` | Approve translation or request revision. Resumes graph. |
+| `GET` | `/api/chapters` | List novels and chapters with translated status. |
+| `GET` | `/api/chapters/{novel_name}/{chapter_number}` | Fetch raw and translated text for read-only viewing. |
 
 ### Status endpoint response shape
 
@@ -337,19 +342,24 @@ Phase 1 rules:
   "status": "glossary_review",
   "error_detail": null,
   "glossary_terms": [...],
-  "edited_text": null
+  "raw_chinese_text": null,
+  "edited_text": null,
+  "warnings": []
 }
 ```
 
 `glossary_terms` is non-null only when `status="glossary_review"`.
+`raw_chinese_text` is non-null only when `status="final_review"`.
 `edited_text` is non-null only when `status="final_review"`.
 `error_detail` is non-null only when `status="error"`.
+`warnings` contains the current non-blocking workflow alerts.
 
-The full `WorkflowState` object is never exposed via the API. Only these four fields are returned.
+The full `WorkflowState` object is never exposed via the API. Only these six
+fields are returned.
 
 ### CORS
 
-Allowed origin: `http://localhost:3000` (Next.js dev server). Wildcard `*` is not permitted.
+Allowed origin: `http://localhost:5173` (Next.js dev server). Wildcard `*` is not permitted.
 
 ---
 
@@ -357,24 +367,43 @@ Allowed origin: `http://localhost:3000` (Next.js dev server). Wildcard `*` is no
 
 **Framework:** Next.js (App Router)
 
-The UI is a single-page application. There is no routing — the active panel is driven by the `status` field returned by the polling hook.
+The UI is a desktop-first, single-page persistent review workspace. There is no
+routing. The active panel is driven by chapter selection or by the `status`
+field returned by the polling hook. Only one workflow may be active in a browser
+session.
 
 ### Panels by status
 
 | Status | Panel rendered |
 |---|---|
-| (no workflow) | `StartPanel` — novel name + chapter number form |
-| `fetching` `translating` `editing` | `LoadingPanel` — spinner |
-| `glossary_review` | `GlossaryReview` — term approval table |
-| `final_review` | `FinalReview` — prose display + approve/revise |
-| `complete` | `CompletePanel` — final text + reset |
+| (no workflow) | `StartPanel` — dependent novel and chapter dropdowns |
+| (translated chapter selected) | `ReadOnlyChapter` — side-by-side source and translation |
+| `fetching` `translating` `editing` | `LoadingPanel` — stage details, elapsed time, cancel |
+| `glossary_review` | `GlossaryReview` — term review cards and added terms |
+| `final_review` | `FinalReview` — side-by-side text and sticky review actions |
+| `complete` | `CompletePanel` — success receipt and next actions |
 | `error` | `ErrorBanner` — error_detail + start over |
+
+The start screen loads its dropdowns from the chapter catalog endpoint.
+Translated chapters remain selectable but open read-only instead of starting a
+new workflow.
+
+Glossary proposals are prefilled into editable English fields, but every
+extracted term still requires an explicit approve or reject decision. Reviewers
+may add missed terms; these submit as automatically approved suggestions.
+
+Final review displays `raw_chinese_text` and `edited_text` in independently
+scrolling panels. Non-blocking warnings remain visible without preventing
+approval.
 
 ### Polling
 
 `useWorkflow` hook polls `GET /api/workflow/{id}/status` every 2 seconds. Polling stops automatically when status is `complete` or `error`. The hook cleans up its interval on unmount.
 
 `workflow_id` is stored in React state only — not in `localStorage`. A page refresh resets the app to `StartPanel`. This is intentional for phase 1.
+
+Frontend acceptance is verified manually by the user. Phase 1 does not require
+automated frontend tests.
 
 ---
 

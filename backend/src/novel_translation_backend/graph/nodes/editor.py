@@ -16,18 +16,25 @@ EDITOR_FEEDBACK_MARKER = "{{EDITOR_FEEDBACK}}"
 INVALID_EDITED_TEXT_MARKER = "{{INVALID_EDITED_TEXT}}"
 VALIDATION_FAILURES_MARKER = "{{VALIDATION_FAILURES}}"
 
+
 def editor_node(state: WorkflowState) -> WorkflowState:
     state["status"] = WORKFLOW_STATUS_EDITING
 
     translated_text = state["translated_text"]
     if translated_text is None or not translated_text.strip():
         raise ValueError("translated_text must be non-empty before editing")
+    editor_feedback = state["editor_feedback"]
+    editor_input = (
+        state["edited_text"] if editor_feedback is not None else translated_text
+    )
+    if editor_input is None or not editor_input.strip():
+        raise ValueError("editor input must be non-empty before editing")
     invalid_edited_text: str | None = None
     validation_failures: list[str] = []
     for attempt in range(MAX_EDITOR_CORRECTION_RETRIES + 1):
         prompt = _build_prompt(
-            translated_text=translated_text,
-            editor_feedback=state["editor_feedback"],
+            translated_text=editor_input,
+            editor_feedback=editor_feedback,
             invalid_edited_text=invalid_edited_text,
             validation_failures=validation_failures,
         )
@@ -35,6 +42,8 @@ def editor_node(state: WorkflowState) -> WorkflowState:
         validation_failures = _formatting_failures(edited_text)
         if not validation_failures:
             state["edited_text"] = edited_text
+            state["editor_feedback"] = None
+            state["editor_revision"] += 1
             return state
         invalid_edited_text = edited_text
 
@@ -43,6 +52,8 @@ def editor_node(state: WorkflowState) -> WorkflowState:
         raise RuntimeError("Editor exhausted retries without producing text")
 
     state["edited_text"] = invalid_edited_text
+    state["editor_feedback"] = None
+    state["editor_revision"] += 1
     warning = (
         "Editor response failed formatting validation after "
         f"{MAX_EDITOR_CORRECTION_RETRIES + 1} attempts: {failures}"

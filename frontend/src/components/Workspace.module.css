@@ -1,0 +1,66 @@
+.workspace {
+  min-height: 100vh;
+  padding: 0 32px 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 86px;
+  border-bottom: 1px solid #dfe4ec;
+}
+
+.header h1 {
+  margin: 2px 0 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.productLabel,
+.kicker {
+  margin: 0;
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.context {
+  margin: 0;
+  color: #475467;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cancelWorkflowButton {
+  min-height: 38px;
+  border: 1px solid #f0b4ae;
+  border-radius: 8px;
+  padding: 7px 13px;
+  color: #b42318;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancelWorkflowButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cancelError {
+  margin: 16px 0 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #b42318;
+  background: #fef3f2;
+  font-size: 0.85rem;
+}

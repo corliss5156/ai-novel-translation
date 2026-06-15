@@ -14,16 +14,24 @@ from novel_translation_backend.constants.review import (
     REVIEW_ACTION_REVISE,
 )
 from novel_translation_backend.constants.workflow_status import (
+    WORKFLOW_ERROR_CODE_SAVE_CONFLICT,
+    WORKFLOW_ERROR_CODE_SAVE_FAILED,
+    WORKFLOW_ERROR_STAGE_COMPLETE,
     WORKFLOW_STATUS_COMPLETE,
     WORKFLOW_STATUS_EDITING,
     WORKFLOW_STATUS_ERROR,
     WORKFLOW_STATUS_FINAL_REVIEW,
     WORKFLOW_STATUS_GLOSSARY_REVIEW,
-    WORKFLOW_STATUS_PENDING,
+    WORKFLOW_STATUS_SAVING,
     WORKFLOW_STATUS_TRANSLATING,
 )
 from novel_translation_backend.graph.graph import graph
+from novel_translation_backend.graph.nodes.complete import complete_node
 from novel_translation_backend.graph.state import GlossaryTerm, WorkflowState
+from novel_translation_backend.storage.s3_chapters import (
+    ChapterSaveConflictError,
+    ChapterSaveError,
+)
 
 
 state_store: dict[str, WorkflowState] = {}
@@ -57,6 +65,14 @@ class InvalidFinalReviewDecisionError(ValueError):
     pass
 
 
+class InvalidEditorReviewFeedbackError(ValueError):
+    pass
+
+
+class WorkflowSaveNotRetryableError(RuntimeError):
+    pass
+
+
 async def run_graph(
     workflow_id: str,
     graph_input: WorkflowState | Command[Any],
@@ -83,6 +99,15 @@ async def run_graph(
             if workflow_state is not None:
                 workflow_state["status"] = WORKFLOW_STATUS_ERROR
                 workflow_state["error_detail"] = str(exc)
+                if isinstance(exc, ChapterSaveConflictError):
+                    workflow_state["error_stage"] = WORKFLOW_ERROR_STAGE_COMPLETE
+                    workflow_state["error_code"] = WORKFLOW_ERROR_CODE_SAVE_CONFLICT
+                elif isinstance(exc, ChapterSaveError):
+                    workflow_state["error_stage"] = WORKFLOW_ERROR_STAGE_COMPLETE
+                    workflow_state["error_code"] = WORKFLOW_ERROR_CODE_SAVE_FAILED
+                else:
+                    workflow_state["error_stage"] = None
+                    workflow_state["error_code"] = None
         raise
 
 
@@ -205,8 +230,7 @@ async def submit_glossary_review(
 
 async def submit_final_review(
     workflow_id: str,
-    action: str,
-    feedback: str | None,
+    final_text: str,
 ) -> None:
     async with _state_store_lock:
         workflow_state = state_store.get(workflow_id)
@@ -215,33 +239,93 @@ async def submit_final_review(
         if workflow_state["status"] != WORKFLOW_STATUS_FINAL_REVIEW:
             raise WorkflowNotPausedForFinalReviewError(workflow_id)
 
-        if action not in {REVIEW_ACTION_APPROVE, REVIEW_ACTION_REVISE}:
+        if not final_text.strip():
             raise InvalidFinalReviewDecisionError(
-                "Final review action must be approve or revise"
-            )
-        if action == REVIEW_ACTION_REVISE and (
-            feedback is None or not feedback.strip()
-        ):
-            raise InvalidFinalReviewDecisionError(
-                "Revision feedback must be a non-empty string"
+                "Final text must be a non-empty string"
             )
 
-        if action == REVIEW_ACTION_REVISE:
-            workflow_state["editor_feedback"] = feedback
-            workflow_state["status"] = WORKFLOW_STATUS_EDITING
-            resume_payload = {
-                "action": REVIEW_ACTION_REVISE,
-                "feedback": feedback,
-            }
-        else:
-            workflow_state["status"] = WORKFLOW_STATUS_PENDING
-            resume_payload = {"action": REVIEW_ACTION_APPROVE}
-
+        workflow_state["final_text"] = final_text
+        workflow_state["status"] = WORKFLOW_STATUS_SAVING
         state_update = deepcopy(workflow_state)
         _schedule_graph(
             workflow_id,
-            Command(update=state_update, resume=resume_payload),
+            Command(
+                update=state_update,
+                resume={"action": REVIEW_ACTION_APPROVE},
+            ),
         )
+
+
+async def submit_editor_review(
+    workflow_id: str,
+    feedback: str,
+) -> None:
+    async with _state_store_lock:
+        workflow_state = state_store.get(workflow_id)
+        if workflow_state is None:
+            raise WorkflowNotFoundError(workflow_id)
+        if workflow_state["status"] != WORKFLOW_STATUS_FINAL_REVIEW:
+            raise WorkflowNotPausedForFinalReviewError(workflow_id)
+        if len(feedback.strip()) < 10:
+            raise InvalidEditorReviewFeedbackError(
+                "Editor revision feedback must contain at least 10 characters"
+            )
+
+        workflow_state["editor_feedback"] = feedback.strip()
+        workflow_state["status"] = WORKFLOW_STATUS_EDITING
+        state_update = deepcopy(workflow_state)
+        _schedule_graph(
+            workflow_id,
+            Command(
+                update=state_update,
+                resume={"action": REVIEW_ACTION_REVISE},
+            ),
+        )
+
+
+async def retry_final_save(workflow_id: str) -> None:
+    async with _state_store_lock:
+        workflow_state = state_store.get(workflow_id)
+        if workflow_state is None:
+            raise WorkflowNotFoundError(workflow_id)
+        if (
+            workflow_state["status"] != WORKFLOW_STATUS_ERROR
+            or workflow_state["error_stage"] != WORKFLOW_ERROR_STAGE_COMPLETE
+            or workflow_state["error_code"] != WORKFLOW_ERROR_CODE_SAVE_FAILED
+        ):
+            raise WorkflowSaveNotRetryableError(workflow_id)
+
+        final_text = workflow_state["final_text"]
+        if final_text is None or not final_text.strip():
+            raise WorkflowSaveNotRetryableError(workflow_id)
+
+        workflow_state["status"] = WORKFLOW_STATUS_SAVING
+        state_update = deepcopy(workflow_state)
+
+    try:
+        completed_state = complete_node(state_update)
+    except ChapterSaveConflictError as exc:
+        async with _state_store_lock:
+            workflow_state = state_store.get(workflow_id)
+            if workflow_state is not None:
+                workflow_state["status"] = WORKFLOW_STATUS_ERROR
+                workflow_state["error_detail"] = str(exc)
+                workflow_state["error_stage"] = WORKFLOW_ERROR_STAGE_COMPLETE
+                workflow_state["error_code"] = WORKFLOW_ERROR_CODE_SAVE_CONFLICT
+        raise
+    except ChapterSaveError as exc:
+        async with _state_store_lock:
+            workflow_state = state_store.get(workflow_id)
+            if workflow_state is not None:
+                workflow_state["status"] = WORKFLOW_STATUS_ERROR
+                workflow_state["error_detail"] = str(exc)
+                workflow_state["error_stage"] = WORKFLOW_ERROR_STAGE_COMPLETE
+                workflow_state["error_code"] = WORKFLOW_ERROR_CODE_SAVE_FAILED
+        raise
+
+    async with _state_store_lock:
+        if workflow_id in state_store:
+            state_store[workflow_id] = completed_state
 
 
 async def get_state(workflow_id: str) -> WorkflowState | None:

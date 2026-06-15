@@ -1,0 +1,97 @@
+.panel {
+  max-width: 760px;
+  margin: 72px auto;
+  border: 1px solid #dfe4ec;
+  border-radius: 16px;
+  padding: 32px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(16 24 40 / 6%);
+}
+
+.intro {
+  margin-bottom: 28px;
+}
+
+.intro h2 {
+  margin: 4px 0 8px;
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+}
+
+.intro p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.6;
+}
+
+.eyebrow {
+  color: #2563eb !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 16px;
+}
+
+.controls label {
+  display: grid;
+  gap: 8px;
+  color: #344054;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.controls select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cfd6e1;
+  border-radius: 8px;
+  padding: 0 36px 0 12px;
+  color: #182230;
+  background: #fff;
+}
+
+.primaryAction {
+  min-height: 44px;
+  border: 1px solid #1d4ed8;
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #fff;
+  background: #2563eb;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primaryAction:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.primaryAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.notice,
+.error {
+  margin: 20px 0 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+}
+
+.notice {
+  color: #475467;
+  background: #f8fafc;
+}
+
+.error {
+  color: #b42318;
+  background: #fef3f2;
+}

@@ -1,0 +1,92 @@
+.banner {
+  max-width: 680px;
+  margin: 56px auto;
+  border: 1px solid #f0b4ae;
+  border-radius: 14px;
+  padding: 28px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(16 24 40 / 6%);
+}
+
+.eyebrow {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.banner h2 {
+  margin: 7px 0 9px;
+  color: #7a271a;
+}
+
+.detail {
+  margin: 0 0 20px;
+  color: #667085;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.preservedText {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+}
+
+.preservedText label {
+  color: #344054;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.preservedText textarea {
+  width: 100%;
+  min-height: 240px;
+  resize: vertical;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 12px;
+  color: #344054;
+  background: #f8fafc;
+  font: inherit;
+  line-height: 1.65;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.banner button {
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 8px 15px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.retryButton {
+  border: 1px solid #1d4ed8;
+  color: #fff;
+  background: #2563eb;
+}
+
+.startOverButton {
+  border: 1px solid #b42318;
+  color: #b42318;
+  background: #fff;
+}
+
+.banner button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.retryError {
+  margin: 14px 0 0;
+  color: #b42318;
+  font-size: 0.85rem;
+}

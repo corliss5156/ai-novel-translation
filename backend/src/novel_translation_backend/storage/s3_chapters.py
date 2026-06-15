@@ -1,23 +1,40 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+import re
+from typing import Any, TypedDict, cast
 
-import boto3
-from botocore.exceptions import ClientError
+import boto3  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 
 RAW_PREFIX = "raw"
 TRANSLATED_PREFIX = "translated"
 DEFAULT_BUCKET_NAME = "novel-translation"
+CHAPTER_KEY_PATTERN = re.compile(
+    r"^(?P<prefix>raw|translated)/(?P<novel_name>[^/]+)/chapter-(?P<chapter_number>\d{3,})\.txt$"
+)
+
+
+class ChapterCatalogItem(TypedDict):
+    chapter_number: int
+    translated: bool
 
 
 class ChapterNotFoundError(FileNotFoundError):
-    """Raised when a requested raw chapter object does not exist in S3."""
+    """Raised when a requested chapter object does not exist in S3."""
 
 
 class ChapterAlreadyExistsError(FileExistsError):
     """Raised when a translated chapter object already exists in S3."""
+
+
+class ChapterSaveError(RuntimeError):
+    """Raised when an approved chapter cannot be saved to S3."""
+
+
+class ChapterSaveConflictError(ChapterSaveError):
+    """Raised when a different translated chapter already exists in S3."""
 
 
 def _bucket_name() -> str:
@@ -40,10 +57,9 @@ def _chapter_key(prefix: str, novel_name: str, chapter_number: int) -> str:
     return f"{prefix}/{novel_name}/chapter-{chapter_number:04d}.txt"
 
 
-def fetch_chapter(novel_name: str, chapter_number: int) -> str:
-    """Fetch raw Chinese chapter text from S3."""
+def _fetch_chapter(prefix: str, novel_name: str, chapter_number: int) -> str:
     bucket = _bucket_name()
-    key = _chapter_key(RAW_PREFIX, novel_name, chapter_number)
+    key = _chapter_key(prefix, novel_name, chapter_number)
 
     try:
         response = _s3_client().get_object(Bucket=bucket, Key=key)
@@ -55,10 +71,81 @@ def fetch_chapter(novel_name: str, chapter_number: int) -> str:
             ) from exc
         raise
 
-    content = response["Body"].read().decode("utf-8")
+    content = cast(bytes, response["Body"].read()).decode("utf-8")
     if not content.strip():
         raise ChapterNotFoundError(f"Chapter at s3://{bucket}/{key} is empty")
     return content
+
+
+def fetch_chapter(novel_name: str, chapter_number: int) -> str:
+    """Fetch raw Chinese chapter text from S3."""
+    return _fetch_chapter(RAW_PREFIX, novel_name, chapter_number)
+
+
+def fetch_translated_chapter(novel_name: str, chapter_number: int) -> str:
+    """Fetch translated English chapter text from S3."""
+    return _fetch_chapter(TRANSLATED_PREFIX, novel_name, chapter_number)
+
+
+def _list_keys(prefix: str) -> list[str]:
+    client = _s3_client()
+    bucket = _bucket_name()
+    keys: list[str] = []
+    continuation_token: str | None = None
+
+    while True:
+        parameters: dict[str, Any] = {
+            "Bucket": bucket,
+            "Prefix": f"{prefix}/",
+        }
+        if continuation_token is not None:
+            parameters["ContinuationToken"] = continuation_token
+
+        response = client.list_objects_v2(**parameters)
+        keys.extend(
+            item["Key"]
+            for item in response.get("Contents", [])
+            if isinstance(item.get("Key"), str)
+        )
+
+        if not response.get("IsTruncated"):
+            return keys
+        continuation_token = response["NextContinuationToken"]
+
+
+def _parse_chapter_key(key: str, prefix: str) -> tuple[str, int] | None:
+    match = CHAPTER_KEY_PATTERN.fullmatch(key)
+    if match is None or match.group("prefix") != prefix:
+        return None
+    chapter_number = int(match.group("chapter_number"))
+    if chapter_number < 1:
+        return None
+    return match.group("novel_name"), chapter_number
+
+
+def list_chapters() -> dict[str, list[ChapterCatalogItem]]:
+    """List raw chapters grouped by novel with translated status."""
+    raw_chapters = {
+        parsed
+        for key in _list_keys(RAW_PREFIX)
+        if (parsed := _parse_chapter_key(key, RAW_PREFIX)) is not None
+    }
+    translated_chapters = {
+        parsed
+        for key in _list_keys(TRANSLATED_PREFIX)
+        if (parsed := _parse_chapter_key(key, TRANSLATED_PREFIX)) is not None
+    }
+
+    catalog: dict[str, list[ChapterCatalogItem]] = {}
+    for novel_name, chapter_number in sorted(raw_chapters):
+        catalog.setdefault(novel_name, []).append(
+            {
+                "chapter_number": chapter_number,
+                "translated": (novel_name, chapter_number)
+                in translated_chapters,
+            }
+        )
+    return catalog
 
 
 def upload_chapter(novel_name: str, chapter_number: int, content: str) -> None:
@@ -84,3 +171,35 @@ def upload_chapter(novel_name: str, chapter_number: int, content: str) -> None:
                 f"Translated chapter already exists at s3://{bucket}/{key}"
             ) from exc
         raise
+
+
+def save_final_chapter(
+    novel_name: str,
+    chapter_number: int,
+    final_text: str,
+) -> None:
+    """Save approved text once, treating an identical existing object as success."""
+    if not final_text.strip():
+        raise ValueError("final_text must be a non-empty string")
+
+    try:
+        upload_chapter(novel_name, chapter_number, final_text)
+        return
+    except ChapterAlreadyExistsError:
+        pass
+    except Exception as exc:
+        raise ChapterSaveError("Unable to save the approved translation") from exc
+
+    try:
+        existing_text = fetch_translated_chapter(novel_name, chapter_number)
+    except Exception as exc:
+        raise ChapterSaveError(
+            "Unable to verify the existing translated chapter"
+        ) from exc
+
+    if existing_text == final_text:
+        return
+
+    raise ChapterSaveConflictError(
+        "A different translated chapter already exists and will not be overwritten"
+    )
