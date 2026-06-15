@@ -25,7 +25,7 @@ This project demonstrates how to combine LLM automation with human judgment:
 
 ## Workflow
 
-![Compiled LangGraph translation workflow](graph_output.png)
+![Compiled LangGraph translation workflow](docs/screenshots/graph_output.png)
 
 This visualization is generated from the compiled LangGraph workflow in
 `backend/src/novel_translation_backend/graph/graph.py`. Solid edges are direct
